@@ -27,7 +27,7 @@ jobs:
       - name: Pull image from docker hub
         run: docker pull muhammadyusuf2766/gssiot-company-backend19.08.2025:latest
       - name: Delete old container
-        run: docker rm -f muhammadyusuf2766/gssiot-company-backend19.08.2025
+        run: docker rm -f nodejs-app-container
       - name: Run Docker Container
         run: |
           docker run -d -p 3000:3000 --name nodejs-app-container \
