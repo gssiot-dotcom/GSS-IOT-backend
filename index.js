@@ -18,8 +18,8 @@ const fs = require('fs')
 // request allowed domains
 const allowedOrigins = [
 	'https://infogssiot.com',
-	'http://52.79.50.40:3001',
-	'http://52.79.50.40',
+	'http://13.125.157.133:3001',
+	'http://13.125.157.133',
 	'http://localhost:5173',
 ]
 
