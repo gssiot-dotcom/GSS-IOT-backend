@@ -1,5 +1,6 @@
 const multer = require('multer')
 const path = require('path')
+const fs = require('fs')
 
 //  Configure Strorage
 const uploadDir = path.join(process.cwd(), 'static/images')
