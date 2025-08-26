@@ -14,6 +14,11 @@ const buildingSchema = new mongoose.Schema({
 		type: String,
 		required: true,
 	},
+	building_plan_img: {
+		type: String,
+		required: false,
+		default: '',
+	},
 	building_status: {
 		type: Boolean,
 		required: false,

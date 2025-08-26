@@ -13,7 +13,6 @@ const { setupSocket } = require('./services/Socket.service')
 const app = express()
 const server = http.createServer(app)
 const path = require('path')
-const fs = require('fs')
 
 // request allowed domains
 const allowedOrigins = [

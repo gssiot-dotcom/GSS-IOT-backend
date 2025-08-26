@@ -5,6 +5,7 @@ const NodeSchema = require('../schema/Node.model')
 const AngleNodeSchema = require('../schema/Angle.node.model')
 const AngleNodeHistorySchema = require('../schema/Angle.node.history.model')
 const { mqttClient, mqttEmitter } = require('./Mqtt.service')
+const { logError } = require('../lib/logger')
 
 class CompanyService {
 	constructor() {
@@ -232,6 +233,7 @@ class CompanyService {
 				.find({
 					gateway_id: { $in: gatewayIds },
 				})
+				.populate('gateway_id', 'serial_number')
 				.sort({ doorNum: 1 })
 
 			// const promises = angleNodes.map(async node => {
@@ -459,6 +461,21 @@ class CompanyService {
 		}
 
 		return 'All OFFICE_GATEWAY type gateways waked up!'
+	}
+
+	async uploadBuildingImageData(building_id, imageUrl) {
+		try {
+			const building = await this.buildingSchema.findByIdAndUpdate(
+				building_id,
+				{ $set: { building_plan_img: imageUrl } },
+				{ new: true } // yangilangan hujjat qaytadi
+			)
+			if (!building) throw new Error('There is no any building with this _id')
+			return building
+		} catch (error) {
+			logError(`Error on uploading building image: ${error}`)
+			throw error // `throw new Error(error)` emas, to‘g‘ridan
+		}
 	}
 
 	// ==========================================================================================================

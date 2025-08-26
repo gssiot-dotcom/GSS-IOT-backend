@@ -39,28 +39,10 @@ company_router.post('/boss-clients', companyController.getBossClients)
 company_router.post('/gateway/wake_up', companyController.wakeUpOfficeGateway)
 
 // ======================================================= //
-company_router.post('/upload-company-plan', (req, res) => {
-	uploadImage.single('image')(req, res, err => {
-		if (err instanceof multer.MulterError) {
-			return res.status(400).json({ message: err.message, code: err.code })
-		} else if (err) {
-			return res.status(400).json({ message: err.message })
-		}
-
-		if (!req.file) {
-			return res.status(400).json({ message: 'No file uploaded' })
-		}
-
-		// URL qaytarishda static/images ga yo‘naltirasiz
-		const imageUrl = `${req.protocol}://${req.get('host')}/static/images/${
-			req.file.filename
-		}`
-
-		res.status(200).json({
-			message: 'Company plan image uploaded successfully.',
-			imageUrl,
-		})
-	})
-})
+company_router.put(
+	'/upload-company-plan',
+	uploadImage.single('image'),
+	companyController.uploadBuildingImage
+)
 
 module.exports = company_router

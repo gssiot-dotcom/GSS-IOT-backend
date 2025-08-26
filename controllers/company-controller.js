@@ -1,5 +1,7 @@
 const CompanyService = require('../services/company.service')
 const { logger, logError } = require('../lib/logger')
+const uploadImage = require('../middlewares/uploadImage')
+const multer = require('multer')
 
 let companyController = module.exports
 
@@ -209,6 +211,37 @@ companyController.wakeUpOfficeGateway = async (req, res) => {
 	} catch (error) {
 		logError(error)
 		res.json({ state: 'fail', message: error.message })
+	}
+}
+
+companyController.uploadBuildingImage = async (req, res) => {
+	try {
+		// Endi bu yerda req.body va req.file bor
+		const { building_id } = req.body
+
+		console.log(req.body)
+		if (!req.file) {
+			return res.status(400).json({ message: 'No file uploaded' })
+		}
+		if (!building_id) {
+			return res.status(400).json({ message: 'building_id kerak' })
+		}
+
+		const imageUrl = req.file.filename // yoki req.file.path
+		const companyService = new CompanyService()
+		const result = await companyService.uploadBuildingImageData(
+			building_id,
+			imageUrl
+		)
+
+		return res.status(200).json({
+			state: 'success',
+			message: 'Building image uploaded successfully!',
+			building: result,
+		})
+	} catch (error) {
+		logError(error)
+		return res.status(500).json({ state: 'fail', message: error.message })
 	}
 }
 

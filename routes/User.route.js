@@ -1,7 +1,6 @@
 const express = require('express')
 const user_router = express.Router()
 const userController = require('../controllers/user-controller')
-const upload = require('../middlewares/uploadImage')
 
 user_router.post('/register', userController.register)
 user_router.post('/login', userController.login)
