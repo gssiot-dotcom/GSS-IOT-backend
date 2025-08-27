@@ -219,12 +219,12 @@ companyController.uploadBuildingImage = async (req, res) => {
 		// Endi bu yerda req.body va req.file bor
 		const { building_id } = req.body
 
-		console.log(req.body)
+		logger(req.body)
 		if (!req.file) {
 			return res.status(400).json({ message: 'No file uploaded' })
 		}
 		if (!building_id) {
-			return res.status(400).json({ message: 'building_id kerak' })
+			return res.status(400).json({ message: 'building_id is needed' })
 		}
 
 		const imageUrl = req.file.filename // yoki req.file.path

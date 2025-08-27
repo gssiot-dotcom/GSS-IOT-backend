@@ -5,7 +5,9 @@ const NodeSchema = require('../schema/Node.model')
 const AngleNodeSchema = require('../schema/Angle.node.model')
 const AngleNodeHistorySchema = require('../schema/Angle.node.history.model')
 const { mqttClient, mqttEmitter } = require('./Mqtt.service')
-const { logError } = require('../lib/logger')
+const { logError, logger } = require('../lib/logger')
+const fs = require('fs/promises')
+const path = require('path')
 
 class CompanyService {
 	constructor() {
@@ -464,7 +466,45 @@ class CompanyService {
 	}
 
 	async uploadBuildingImageData(building_id, imageUrl) {
+		const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
 		try {
+			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
+			const existing = await this.buildingSchema
+				.findById(building_id)
+				.select('building_plan_img') // xohlasangiz "-_id" ham qo‘shishingiz mumkin
+				.lean()
+
+			if (!existing) throw new Error('There is no any building with this _id')
+
+			const oldImage = existing.building_plan_img
+			logger(`existing: ${oldImage}`)
+
+			if (oldImage && oldImage !== imageUrl) {
+				// Faqat fayl nomini ajratib olamiz (URL/yo‘l bo‘lsa ham)
+				const oldBasename = path.basename(oldImage)
+				const oldFilePath = path.join(IMAGES_DIR, oldBasename) // ✅ to‘g‘ri
+				// Debug uchun foydali:
+				logger(`cwd: ${process.cwd()}`)
+				logger(`IMAGES_DIR: ${IMAGES_DIR}`)
+				logger(`oldFilePath: ${oldFilePath}`)
+				try {
+					await fs.access(oldFilePath)
+					await fs.unlink(oldFilePath)
+					logger(`Old building plan image is deleted: ${oldFilePath}`)
+				} catch (error) {
+					// Fayl topilmasa (ENOENT) — e’tiborsiz, boshqa xatolarni log qilamiz
+					if (error.code !== 'ENOENT') {
+						logError(
+							`Failed to delete old image ${oldFilePath}: ${error.message}`
+						)
+						// agar majburiy o‘chirish bo‘lsa, shu yerda throw qilsangiz ham bo‘ladi
+					} else {
+						logError(
+							`Failed to delete old image ${oldFilePath}: ${error.message}`
+						)
+					}
+				}
+			}
 			const building = await this.buildingSchema.findByIdAndUpdate(
 				building_id,
 				{ $set: { building_plan_img: imageUrl } },
