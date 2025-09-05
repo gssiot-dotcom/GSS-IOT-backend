@@ -59,6 +59,12 @@ const buildingSchema = new mongoose.Schema({
 		type: String,
 		default: '',
 	},
+	alarm_level: {
+		blue: { type: Number, default: 0 },
+		green: { type: Number, default: 0 },
+		yellow: { type: Number, default: 0 },
+		red: { type: Number, default: 0 },
+	}, // SubDocument yaratildi.
 })
 
 // ===  Bu qator bitta documentda quyidagi keylarning valulari bir xil bo'lmasligi uchun. shu 3 ta keyning value lari oldin kiritilgan va yana bir xil value lar kiritlib saqlansa xatolik beradi.

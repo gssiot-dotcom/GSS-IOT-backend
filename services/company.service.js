@@ -518,6 +518,26 @@ class CompanyService {
 		}
 	}
 
+	async setAlarmLevel(building_id, alarmLevel) {
+		try {
+			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
+			const existing = await this.buildingSchema.findById(building_id)
+
+			if (!existing) throw new Error('There is no any building with this _id')
+
+			const building = await this.buildingSchema.findByIdAndUpdate(
+				building_id,
+				{ $set: { alarm_level: alarmLevel } },
+				{ new: true } // yangilangan hujjat qaytadi
+			)
+			if (!building) throw new Error('There is no any building with this _id')
+			return building
+		} catch (error) {
+			logError(`Error on uploading building image: ${error}`)
+			throw error // `throw new Error(error)` emas, to‘g‘ridan
+		}
+	}
+
 	// ==========================================================================================================
 	//                              CLIENT-Boss type user related functons                                     //
 	// ==========================================================================================================

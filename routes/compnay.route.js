@@ -25,6 +25,8 @@ company_router.delete(
 	companyController.deleteBuilding
 )
 
+company_router.put('/building/set-alarm-level', companyController.setAlarmLevel)
+
 // ========== Client related endpoints ======= //
 company_router.post('/create-client', companyController.createClient)
 company_router.get('/clients', companyController.getComanies)

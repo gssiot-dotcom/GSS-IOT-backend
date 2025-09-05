@@ -245,6 +245,30 @@ companyController.uploadBuildingImage = async (req, res) => {
 	}
 }
 
+companyController.setAlarmLevel = async (req, res) => {
+	try {
+		console.log('setAlarmLevel called')
+		// Endi bu yerda req.body va req.file bor
+		const { building_id, alarmLevel } = req.body
+
+		if (!building_id) {
+			return res.status(400).json({ message: 'building_id is needed' })
+		}
+
+		const companyService = new CompanyService()
+		const result = await companyService.setAlarmLevel(building_id, alarmLevel)
+
+		return res.status(200).json({
+			state: 'success',
+			message: 'Building alarm-level set successfully!',
+			building: result,
+		})
+	} catch (error) {
+		logError(error)
+		return res.status(500).json({ state: 'fail', message: error.message })
+	}
+}
+
 // ==========================================================================================================
 //                              CLIENT-Boss type user related functons                                     //
 // ==========================================================================================================
