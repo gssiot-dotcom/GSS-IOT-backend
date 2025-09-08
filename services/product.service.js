@@ -5,6 +5,9 @@ const BuildingSchema = require('../schema/Building.model')
 const { mqttClient, mqttEmitter } = require('./Mqtt.service')
 const fileService = require('./file.service')
 const AngleNodeSchema = require('../schema/Angle.node.model')
+const fs = require('fs/promises')
+const path = require('path')
+const { logger, logError } = require('../lib/logger')
 
 class ProductService {
 	constructor() {
@@ -648,6 +651,60 @@ class ProductService {
 		} catch (error) {
 			console.error('Error on node positioning:', error)
 			throw new Error('Error on node positioning.') // ✅ Yangi `Error` obyektini qaytarish
+		}
+	}
+
+	// ============================== Angle-Node-Services ================================== //
+	async uploadAngleNodeImageData(node_id, imageUrl) {
+		const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
+		try {
+			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
+			const existing = await this.angleNodeSchema
+				.findById(node_id)
+				.select('angle_node_img') // xohlasangiz "-_id" ham qo‘shishingiz mumkin
+				.lean()
+
+			if (!existing) throw new Error('There is no any building with this _id')
+
+			const oldImage = existing.angle_node_img
+			logger(`existing: ${oldImage}`)
+
+			if (oldImage && oldImage !== imageUrl) {
+				// Faqat fayl nomini ajratib olamiz (URL/yo‘l bo‘lsa ham)
+				const oldBasename = path.basename(oldImage)
+				const oldFilePath = path.join(IMAGES_DIR, oldBasename) // ✅ to‘g‘ri
+				// Debug uchun foydali:
+				logger(`cwd: ${process.cwd()}`)
+				logger(`IMAGES_DIR: ${IMAGES_DIR}`)
+				logger(`oldFilePath: ${oldFilePath}`)
+				try {
+					await fs.access(oldFilePath)
+					await fs.unlink(oldFilePath)
+					logger(`Old building plan image is deleted: ${oldFilePath}`)
+				} catch (error) {
+					// Fayl topilmasa (ENOENT) — e’tiborsiz, boshqa xatolarni log qilamiz
+					if (error.code !== 'ENOENT') {
+						logError(
+							`Failed to delete old image ${oldFilePath}: ${error.message}`
+						)
+						// agar majburiy o‘chirish bo‘lsa, shu yerda throw qilsangiz ham bo‘ladi
+					} else {
+						logError(
+							`Failed to delete old image ${oldFilePath}: ${error.message}`
+						)
+					}
+				}
+			}
+			const angleNode = await this.angleNodeSchema.findByIdAndUpdate(
+				node_id,
+				{ $set: { angle_node_img: imageUrl } },
+				{ new: true } // yangilangan hujjat qaytadi
+			)
+			if (!angleNode) throw new Error('There is no any angleNode with this _id')
+			return angleNode
+		} catch (error) {
+			logError(`Error on uploading building image: ${error}`)
+			throw error // `throw new Error(error)` emas, to‘g‘ridan
 		}
 	}
 }

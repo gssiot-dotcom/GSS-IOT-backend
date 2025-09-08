@@ -414,3 +414,34 @@ productController.angleNodeGraphicData = async (req, res) => {
 		res.status(500).json({ message: 'Server error' })
 	}
 }
+
+productController.uploadAngleNodeImage = async (req, res) => {
+	try {
+		// Endi bu yerda req.body va req.file bor
+		const { node_id } = req.body
+
+		logger(req.body)
+		if (!req.file) {
+			return res.status(400).json({ message: 'No file uploaded' })
+		}
+		if (!node_id) {
+			return res.status(400).json({ message: 'node_id is needed' })
+		}
+
+		const imageUrl = req.file.filename // yoki req.file.path
+		const productService = new ProductService()
+		const result = await productService.uploadAngleNodeImageData(
+			node_id,
+			imageUrl
+		)
+
+		return res.status(200).json({
+			state: 'success',
+			message: 'Angle-node image uploaded successfully!',
+			building: result,
+		})
+	} catch (error) {
+		logError(error)
+		return res.status(500).json({ state: 'fail', message: error.message })
+	}
+}

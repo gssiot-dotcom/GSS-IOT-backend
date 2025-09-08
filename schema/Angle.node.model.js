@@ -17,6 +17,11 @@ const angleNodeSchema = new mongoose.Schema(
 			required: false,
 			default: 0,
 		},
+		angle_node_img: {
+			type: String,
+			required: false,
+			default: '',
+		},
 		node_status: {
 			type: Boolean,
 			required: false,

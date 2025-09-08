@@ -1,6 +1,7 @@
 const express = require('express')
 const product_router = express.Router()
 const productController = require('../controllers/product-controller')
+const uploadImage = require('../middlewares/uploadImage')
 
 // =============================== Product creating & geting endpoints ================================== //
 
@@ -43,5 +44,10 @@ product_router.post(
 
 // ========================== Angle-Node-Graphic routes ================================== //
 product_router.get('/angle-node/data', productController.angleNodeGraphicData)
+product_router.put(
+	'/angle-node/image',
+	uploadImage.single('image'),
+	productController.uploadAngleNodeImage
+)
 
 module.exports = product_router
