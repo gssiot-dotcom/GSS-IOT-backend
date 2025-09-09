@@ -707,6 +707,23 @@ class ProductService {
 			throw error // `throw new Error(error)` emas, to‘g‘ridan
 		}
 	}
+
+	// ============================== Temporary Services ================================== //
+
+	async setGatewayZoneNameData(gatewayId, zoneName) {
+		try {
+			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
+			const existing = await this.gatewaySchema.findById(gatewayId)
+			if (!existing) throw new Error('There is no any gateway with this _id')
+
+			existing.zone_name = zoneName
+			const updatedGateway = await existing.save()
+			return updatedGateway
+		} catch (error) {
+			logError(`Error on uploading building image: ${error}`)
+			throw error // `throw new Error(error)` emas, to‘g‘ridan
+		}
+	}
 }
 
 module.exports = ProductService

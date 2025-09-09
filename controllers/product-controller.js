@@ -389,6 +389,32 @@ productController.uploadXlsFile = async (req, res) => {
 	}
 }
 
+productController.setGatewayZoneName = async (req, res) => {
+	try {
+		// Endi bu yerda req.body va req.file bor
+		const { zone_name, gateway_id } = req.body
+
+		if (!zone_name) {
+			return res.status(400).json({ message: 'zone_name is needed' })
+		}
+
+		const productService = new ProductService()
+		const result = await productService.setGatewayZoneNameData(
+			gateway_id,
+			zone_name
+		)
+
+		return res.status(200).json({
+			state: 'success',
+			message: 'Gateway-zone added successfully!',
+			gateway: result,
+		})
+	} catch (error) {
+		logError(error)
+		return res.status(500).json({ state: 'fail', message: error.message })
+	}
+}
+
 // ========================== Angle-Node-Graphic routes ================================== //
 productController.angleNodeGraphicData = async (req, res) => {
 	logger('request: angleNodeGraphicData')

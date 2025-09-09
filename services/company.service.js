@@ -238,39 +238,6 @@ class CompanyService {
 				.populate('gateway_id', 'serial_number')
 				.sort({ doorNum: 1 })
 
-			// const promises = angleNodes.map(async node => {
-			// 	// 1. Eng oxirgi tarixiy yozuvni topish
-			// 	const latestHistory = await this.angleNodesHistory
-			// 		.findOne({ doorNum: node.doorNum })
-			// 		.sort({ createdAt: -1 })
-
-			// 	console.log(latestHistory)
-
-			// 	// Agar history mavjud bo'lsa, yangilash
-			// 	if (latestHistory) {
-			// 		const { angle_x, angle_y } = latestHistory
-
-			// 		// 2. AngleNodeSchema dagi hujjatni yangilash
-			// 		await this.angleNodeSchema.updateOne(
-			// 			{ _id: node._id },
-			// 			{
-			// 				$set: {
-			// 					angle_x,
-			// 					angle_y,
-			// 				},
-			// 			}
-			// 		)
-			// 	}
-			// })
-
-			// await Promise.all(promises) // Barchasini kutish
-
-			// 			const updatedNodes = await this.angleNodeSchema
-			// 	.find({
-			// 		gateway_id: { $in: gatewayIds },
-			// 	})
-			// 	.sort({ doorNum: 1 })
-
 			const building = await this.buildingSchema.findOne({ _id: buildingId })
 
 			if (!building) {
@@ -280,7 +247,7 @@ class CompanyService {
 				throw new Error('No nodes found for this building')
 			}
 
-			return { building, angleNodes }
+			return { building, gateways, angleNodes }
 		} catch (error) {
 			// Errorni ushlash
 			console.error('Error on getBuildingNodesData:', error.message)

@@ -51,6 +51,12 @@ const gatewaySchema = new mongoose.Schema({
 		default: null,
 		ref: 'Building',
 	},
+
+	zone_name: {
+		type: String,
+		required: false,
+		default: '',
+	},
 })
 
 const Gateway = mongoose.model('Gateway', gatewaySchema)

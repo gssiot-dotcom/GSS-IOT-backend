@@ -135,6 +135,7 @@ companyController.getBuildingAngleNodes = async (req, res) => {
 		res.json({
 			state: 'success',
 			building: result.building,
+			gateways: result.gateways,
 			angle_nodes: result.angleNodes,
 		})
 	} catch (error) {
