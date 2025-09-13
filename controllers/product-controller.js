@@ -389,6 +389,8 @@ productController.uploadXlsFile = async (req, res) => {
 	}
 }
 
+// ============================== Temporary Services ================================== //
+
 productController.setGatewayZoneName = async (req, res) => {
 	try {
 		// Endi bu yerda req.body va req.file bor
@@ -408,6 +410,30 @@ productController.setGatewayZoneName = async (req, res) => {
 			state: 'success',
 			message: 'Gateway-zone added successfully!',
 			gateway: result,
+		})
+	} catch (error) {
+		logError(error)
+		return res.status(500).json({ state: 'fail', message: error.message })
+	}
+}
+
+productController.setAngleNodePosition = async (req, res) => {
+	try {
+		// Endi bu yerda req.body va req.file bor
+		const positions = req.body
+
+		if (!Array.isArray(positions) || positions.length === 0) {
+			return res.status(400).json({
+				message: 'Positions is needed, please enter angle-node positions ',
+			})
+		}
+
+		const productService = new ProductService()
+		const result = await productService.setAngleNodePositionData(positions)
+
+		return res.status(200).json({
+			state: 'success',
+			message: result.message,
 		})
 	} catch (error) {
 		logError(error)

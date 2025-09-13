@@ -41,7 +41,6 @@ product_router.post(
 	'/combine-angle-nodes',
 	productController.combineAngleNodeToGateway
 )
-product_router.put('/gateway/zone-name', productController.setGatewayZoneName)
 
 // ========================== Angle-Node-Graphic routes ================================== //
 product_router.get('/angle-node/data', productController.angleNodeGraphicData)
@@ -49,6 +48,14 @@ product_router.put(
 	'/angle-node/image',
 	uploadImage.single('image'),
 	productController.uploadAngleNodeImage
+)
+
+// ============================== Temporary Services ================================== //
+
+product_router.put('/gateway/zone-name', productController.setGatewayZoneName)
+product_router.put(
+	'/angle-node/position',
+	productController.setAngleNodePosition
 )
 
 module.exports = product_router

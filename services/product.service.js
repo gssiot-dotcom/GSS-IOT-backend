@@ -724,6 +724,30 @@ class ProductService {
 			throw error // `throw new Error(error)` emas, to‘g‘ridan
 		}
 	}
+
+	async setAngleNodePositionData(positionsArray) {
+		try {
+			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
+
+			for (const item of positionsArray) {
+				const existing = await this.angleNodeSchema.findOne({
+					doorNum: item.doorNum,
+				})
+				if (!existing)
+					throw new Error(
+						`There is no any angleNode with this doorNum: ${item.doorNum}`
+					)
+				existing.position = item.position
+				await existing.save()
+			}
+
+			const result = { message: 'All angle-nodes positions are set.' }
+			return result
+		} catch (error) {
+			logError(`Error on uploading building image: ${error}`)
+			throw error // `throw new Error(error)` emas, to‘g‘ridan
+		}
+	}
 }
 
 module.exports = ProductService
