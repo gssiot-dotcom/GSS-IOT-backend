@@ -13,6 +13,7 @@ const { setupSocket } = require('./services/Socket.service')
 const app = express()
 const server = http.createServer(app)
 const path = require('path')
+const { startHeartbeatJob } = require('./services/heartBeat.service')
 
 // request allowed domains
 const allowedOrigins = [
@@ -73,8 +74,24 @@ const startServer = async () => {
 			.then(() => console.log('MongoDB Atlas connected successfully'))
 			.catch(error => console.error('MongoDB Atlas connection error:', error))
 
+		// DB tayyor bo‘lsa — heartbeat jobni start qiling
+		const heartbeat = startHeartbeatJob({
+			intervalMs: 5 * 60 * 1000, // 5 min
+			windowMs: 60 * 60 * 1000, // 1 soat
+		})
+
 		server.listen(PORT, () => {
 			console.log(`Server is running successfully on: http://localhost:${PORT}`)
+		})
+
+		// ixtiyoriy: process signalda tozalash
+		process.on('SIGINT', () => {
+			heartbeat.stop()
+			process.exit(0)
+		})
+		process.on('SIGTERM', () => {
+			heartbeat.stop()
+			process.exit(0)
 		})
 	} catch (error) {
 		console.log(`Error: ${error}`)

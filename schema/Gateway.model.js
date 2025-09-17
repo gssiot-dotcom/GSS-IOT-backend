@@ -57,6 +57,12 @@ const gatewaySchema = new mongoose.Schema({
 		required: false,
 		default: '',
 	},
+	gateway_alive: {
+		type: Boolean,
+		required: false,
+		default: true,
+	},
+	lastSeen: { type: Date, default: null },
 })
 
 const Gateway = mongoose.model('Gateway', gatewaySchema)

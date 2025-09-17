@@ -655,12 +655,12 @@ class ProductService {
 	}
 
 	// ============================== Angle-Node-Services ================================== //
-	async uploadAngleNodeImageData(node_id, imageUrl) {
+	async uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
 		const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
 		try {
 			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
 			const existing = await this.angleNodeSchema
-				.findById(node_id)
+				.findById(nodeId)
 				.select('angle_node_img') // xohlasangiz "-_id" ham qo‘shishingiz mumkin
 				.lean()
 
@@ -696,8 +696,8 @@ class ProductService {
 				}
 			}
 			const angleNode = await this.angleNodeSchema.findByIdAndUpdate(
-				node_id,
-				{ $set: { angle_node_img: imageUrl } },
+				nodeId,
+				{ $set: { angle_node_img: imageUrl, position: nodePosition } },
 				{ new: true } // yangilangan hujjat qaytadi
 			)
 			if (!angleNode) throw new Error('There is no any angleNode with this _id')

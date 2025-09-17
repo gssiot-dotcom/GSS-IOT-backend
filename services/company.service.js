@@ -221,9 +221,12 @@ class CompanyService {
 
 	async getBuildingAngleNodesData(buildingId) {
 		try {
-			const gateways = await this.gatewaySchema.find({
-				building_id: buildingId,
-			})
+			const gateways = await this.gatewaySchema
+				.find({
+					building_id: buildingId,
+				})
+				.populate('nodes', 'doorNum')
+				.populate('angle_nodes', 'doorNum')
 
 			if (!gateways.length) {
 				throw new Error('No gateways found for this building')

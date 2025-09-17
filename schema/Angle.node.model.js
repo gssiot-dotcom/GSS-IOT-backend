@@ -36,6 +36,12 @@ const angleNodeSchema = new mongoose.Schema(
 			default: null,
 			ref: 'Gateway',
 		},
+		node_alive: {
+			type: Boolean,
+			required: false,
+			default: true,
+		},
+		lastSeen: { type: Date, default: null },
 	},
 	{ timestamps: true }
 )

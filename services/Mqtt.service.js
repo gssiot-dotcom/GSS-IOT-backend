@@ -6,6 +6,7 @@ const EventEmitter = require('events')
 const AngleNodeHistory = require('../schema/Angle.node.history.model')
 const AngleNodeSchema = require('../schema/Angle.node.model')
 const { logger, logError, logInfo } = require('../lib/logger')
+const GatewaySchema = require('../schema/Gateway.model')
 
 // Xabarlarni tarqatish uchun EventEmitter
 // 메시지를 다른 곳에 전달하기 위해 EventEmitter 사용
@@ -155,86 +156,14 @@ mqttClient.on('message', async (topic, message) => {
 				timeString
 			)
 
-			const doorNum = data.doorNum
-
-			// 도어별 켈리브레이션 상태 초기화
-			if (!calibrationByDoor[doorNum]) {
-				calibrationByDoor[doorNum] = {
-					x: [],
-					y: [],
-					applied: false,
-					offsetX: 0,
-					offsetY: 0,
-				}
+			const payload = {
+				doorNum: data.doorNum,
+				gateway_number: gatewayNumber,
+				angle_x: data.angle_x,
+				angle_y: data.angle_y,
 			}
 
-			const calib = calibrationByDoor[doorNum]
-
-			// 1) 아직 켈리브레이션 미적용이면 초기 5개 수집 후 평균 -> 부호 반전하여 offset 확정
-			if (!calib.applied) {
-				calib.x.push(data.angle_x)
-				calib.y.push(data.angle_y)
-
-				if (calib.x.length >= 5) {
-					// 평균값 계산
-					const sumX = calib.x.reduce((a, b) => a + b, 0)
-					const sumY = calib.y.reduce((a, b) => a + b, 0)
-					const avgX = sumX / calib.x.length
-					const avgY = sumY / calib.y.length
-
-					// 부호 반대로 저장 (offset은 항상 avg의 반대 부호)
-					calib.offsetX = -avgX
-					calib.offsetY = -avgY
-					calib.applied = true
-
-					logger(
-						`Calibration 완료(door ${doorNum}): offsetX=${calib.offsetX}, offsetY=${calib.offsetY}`
-					)
-					//  이 시점(5번째 측정)부터 보정값 적용하여 저장 시작
-				} else {
-					logger(`Calibration 수집 중 (door ${doorNum}) ${calib.x.length}/5...`)
-					//  아직 보정값 확정 전이므로 angle DB/History 저장은 하지 않음
-					return
-				}
-			}
-
-			// 2) 보정값 적용: "무조건 더해서" 저장
-			let calibratedX = data.angle_x + calib.offsetX
-			let calibratedY = data.angle_y + calib.offsetY
-
-			// ✅ 소수점 둘째 자리까지만 반올림 후 숫자로 변환
-			calibratedX = parseFloat(calibratedX.toFixed(2))
-			calibratedY = parseFloat(calibratedY.toFixed(2))
-
-			// DB 업데이트용 데이터(보정값 저장)
-			const updateData = {
-				angle_x: calibratedX,
-				angle_y: calibratedY,
-			}
-
-			// 히스토리 저장용 데이터(보정값 저장)
-			const historyData = {
-				gw_number: gatewayNumber,
-				doorNum: doorNum,
-				angle_x: calibratedX,
-				angle_y: calibratedY,
-			}
-
-			// 기존 AngleNode 업데이트 (없으면 생성)
-			const updatedAngleNode = await AngleNodeSchema.findOneAndUpdate(
-				{ doorNum: doorNum },
-				{ $set: updateData },
-				{ new: true, upsert: true }
-			)
-
-			// History 저장
-			const result = new AngleNodeHistory(historyData)
-			await result.save()
-
-			// 이벤트 전달
-			mqttEmitter.emit('mqttAngleMessage', updatedAngleNode)
-
-			// 👉 기존 값과 차이가 클 때만 저장하는 로직(EPSILON 비교)은 요구사항에 따라 사용하지 않음
+			handleIncomingAngleNodeData(payload)
 		}
 	} catch (err) {
 		logError('MQTT 메시지 처리 오류:', err.message)
@@ -249,6 +178,112 @@ mqttClient.on('error', error => {
 // 게이트웨이 응답 이벤트 전달 함수
 const emitGwRes = data => {
 	mqttEmitter.emit('gwPubRes', data)
+}
+
+async function handleIncomingAngleNodeData(payload) {
+	const { gateway_number, doorNum, angle_x, angle_y } = payload
+	const now = new Date()
+
+	// Node ni yangilash
+	await AngleNodeSchema.updateOne(
+		{ doorNum },
+		{
+			$set: { lastSeen: now, node_alive: true },
+		},
+		{ upsert: true }
+	)
+
+	// Gateway ni yangilash (shu node shu gatewayga tegishli)
+	await GatewaySchema.updateOne(
+		{ serial_number: gateway_number },
+		{
+			$set: { lastSeen: now, gateway_alive: true },
+			$setOnInsert: {
+				/* kerak bo‘lsa default maydonlar */
+			},
+		},
+		{ upsert: true }
+	)
+
+	// ============================================== //
+	// 도어별 켈리브레이션 상태 초기화
+	if (!calibrationByDoor[doorNum]) {
+		calibrationByDoor[doorNum] = {
+			x: [],
+			y: [],
+			applied: false,
+			offsetX: 0,
+			offsetY: 0,
+		}
+	}
+
+	const calib = calibrationByDoor[doorNum]
+
+	// 1) 아직 켈리브레이션 미적용이면 초기 5개 수집 후 평균 -> 부호 반전하여 offset 확정
+	if (!calib.applied) {
+		calib.x.push(angle_x)
+		calib.y.push(angle_y)
+
+		if (calib.x.length >= 5) {
+			// 평균값 계산
+			const sumX = calib.x.reduce((a, b) => a + b, 0)
+			const sumY = calib.y.reduce((a, b) => a + b, 0)
+			const avgX = sumX / calib.x.length
+			const avgY = sumY / calib.y.length
+
+			// 부호 반대로 저장 (offset은 항상 avg의 반대 부호)
+			calib.offsetX = -avgX
+			calib.offsetY = -avgY
+			calib.applied = true
+
+			logger(
+				`Calibration 완료(door ${doorNum}): offsetX=${calib.offsetX}, offsetY=${calib.offsetY}`
+			)
+			//  이 시점(5번째 측정)부터 보정값 적용하여 저장 시작
+		} else {
+			logger(`Calibration 수집 중 (door ${doorNum}) ${calib.x.length}/5...`)
+			//  아직 보정값 확정 전이므로 angle DB/History 저장은 하지 않음
+			return
+		}
+	}
+
+	// 2) 보정값 적용: "무조건 더해서" 저장
+	let calibratedX = angle_x + calib.offsetX
+	let calibratedY = angle_y + calib.offsetY
+
+	// ✅ 소수점 둘째 자리까지만 반올림 후 숫자로 변환
+	calibratedX = parseFloat(calibratedX.toFixed(2))
+	calibratedY = parseFloat(calibratedY.toFixed(2))
+
+	// DB 업데이트용 데이터(보정값 저장)
+	const updateData = {
+		angle_x: calibratedX,
+		angle_y: calibratedY,
+	}
+
+	// 히스토리 저장용 데이터(보정값 저장)
+	const historyData = {
+		gw_number: gateway_number,
+		doorNum: doorNum,
+		angle_x: calibratedX,
+		angle_y: calibratedY,
+	}
+
+	// 기존 AngleNode 업데이트 (없으면 생성)
+	const updatedAngleNode = await AngleNodeSchema.findOneAndUpdate(
+		{ doorNum: doorNum },
+		{ $set: updateData },
+		{ new: true, upsert: true }
+	)
+
+	// History 저장
+	const result = new AngleNodeHistory(historyData)
+	await result.save()
+
+	// 이벤트 전달
+	mqttEmitter.emit('mqttAngleMessage', updatedAngleNode)
+
+	// 👉 기존 값과 차이가 클 때만 저장하는 로직(EPSILON 비교)은 요구사항에 따라 사용하지 않음
 }
 
 module.exports = { mqttEmitter, mqttClient }

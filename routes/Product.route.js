@@ -45,7 +45,7 @@ product_router.post(
 // ========================== Angle-Node-Graphic routes ================================== //
 product_router.get('/angle-node/data', productController.angleNodeGraphicData)
 product_router.put(
-	'/angle-node/image',
+	'/angle-node/:id',
 	uploadImage.single('image'),
 	productController.uploadAngleNodeImage
 )

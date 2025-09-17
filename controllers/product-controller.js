@@ -469,21 +469,23 @@ productController.angleNodeGraphicData = async (req, res) => {
 
 productController.uploadAngleNodeImage = async (req, res) => {
 	try {
+		console.log('EditNode Request ')
 		// Endi bu yerda req.body va req.file bor
-		const { node_id } = req.body
+		const nodeId = req.params.id
+		const { node_position } = req.body
 
-		logger(req.body)
 		if (!req.file) {
 			return res.status(400).json({ message: 'No file uploaded' })
 		}
-		if (!node_id) {
+		if (!nodeId) {
 			return res.status(400).json({ message: 'node_id is needed' })
 		}
 
 		const imageUrl = req.file.filename // yoki req.file.path
 		const productService = new ProductService()
 		const result = await productService.uploadAngleNodeImageData(
-			node_id,
+			nodeId,
+			node_position,
 			imageUrl
 		)
 
