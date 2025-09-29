@@ -103,7 +103,7 @@ exports.getWindSeriesForBuilding = async (req, res, next) => {
     }
 
     // 필요한 필드만 가져오기 (그래프용 최소 페이로드)
-    const projection = { _id: 0, timestamp: 1, windSpeed: 1 } // 스키마에 맞게 필드명 확인
+    const projection = { _id: 0, timestamp: 1, wind_speed: 1 } // 스키마에 맞게 필드명 확인
     const items = await Weather.find(q).select(projection).sort(sort).lean()
 
     // 단위 변환(옵션): ?unit=kmh 로 주면 m/s -> km/h
@@ -112,9 +112,9 @@ exports.getWindSeriesForBuilding = async (req, res, next) => {
     if (unit && unit.toLowerCase() === 'kmh') {
       data = items.map(it => ({
         timestamp: it.timestamp,
-        windSpeed: (typeof it.windSpeed === 'number')
-          ? Number((it.windSpeed * 3.6).toFixed(2))
-          : it.windSpeed
+        wind_speed: (typeof it.wind_speed === 'number')
+          ? Number((it.wind_speed * 3.6).toFixed(2))
+          : it.wind_speed
       }))
       unitLabel = 'km/h'
     }
