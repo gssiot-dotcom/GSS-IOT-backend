@@ -83,3 +83,48 @@ exports.getLatestWeather = async (req, res, next) => {
     res.json(doc)
   } catch (err) { next(err) }
 }
+
+exports.getWindSeriesForBuilding = async (req, res, next) => {
+  try {
+    const { id: buildingId } = req.params
+    const { from, to, sort = 'timestamp', unit } = req.query
+    // sort: 'timestamp' | '-timestamp'  (기본: 오름차순)
+
+    if (!buildingId) return res.status(400).json({ message: 'buildingId가 필요합니다.' })
+
+    const building = await Building.findById(buildingId).lean()
+    if (!building) return res.status(404).json({ message: '존재하지 않는 빌딩입니다.' })
+
+    const q = { building: buildingId }
+    if (from || to) {
+      q.timestamp = {}
+      if (from) q.timestamp.$gte = new Date(from)
+      if (to) q.timestamp.$lte = new Date(to)
+    }
+
+    // 필요한 필드만 가져오기 (그래프용 최소 페이로드)
+    const projection = { _id: 0, timestamp: 1, windSpeed: 1 } // 스키마에 맞게 필드명 확인
+    const items = await Weather.find(q).select(projection).sort(sort).lean()
+
+    // 단위 변환(옵션): ?unit=kmh 로 주면 m/s -> km/h
+    let data = items
+    let unitLabel = 'm/s'
+    if (unit && unit.toLowerCase() === 'kmh') {
+      data = items.map(it => ({
+        timestamp: it.timestamp,
+        windSpeed: (typeof it.windSpeed === 'number')
+          ? Number((it.windSpeed * 3.6).toFixed(2))
+          : it.windSpeed
+      }))
+      unitLabel = 'km/h'
+    }
+
+    return res.json({
+      building: { _id: building._id, name: building.name ?? undefined },
+      count: data.length,
+      unit: unitLabel,
+      sort,
+      data // [{ timestamp, windSpeed }]
+    })
+  } catch (err) { next(err) }
+}
