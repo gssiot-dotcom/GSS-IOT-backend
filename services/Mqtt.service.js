@@ -268,13 +268,30 @@ async function handleIncomingAngleNodeData(payload) {
     { new: true, upsert: true }
   )
 
-  // ✅ AngleNodeHistory: 보정값만 저장
+  // AngleNodeHistory: 보정값만 저장
   await new AngleNodeHistory({
     gw_number: gateway_number,
     doorNum,
     angle_x: calibratedX, // 보정 적용된 값
     angle_y: calibratedY, // 보정 적용된 값
   }).save()
+
+  // ✅ 빌딩 연결된 게이트웨이일 때만, 보정값 기준으로 알림 로그 적재(yellow/red만)
+const { checkAndLogAngle } = require('../services/Alert.service')
+ await checkAndLogAngle({
+   gateway_serial: String(gateway_number),
+   doorNum,
+   metric: 'angle_x',
+   value: Number(calibratedX),
+   raw: { angle_x, angle_y, calibratedX, calibratedY }
+ })
+ await checkAndLogAngle({
+   gateway_serial: String(gateway_number),
+   doorNum,
+  metric: 'angle_y',
+   value: Number(calibratedY),
+   raw: { angle_x, angle_y, calibratedX, calibratedY }
+ })
 
   // 이벤트 전달
   mqttEmitter.emit('mqttAngleMessage', updatedAngleNode)
