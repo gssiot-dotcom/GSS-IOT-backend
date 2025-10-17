@@ -9,13 +9,14 @@ const AlertLog = require('../schema/AlertLog.model')
  * @param {Object} p
  * @param {String|Number} p.gateway_serial - 게이트웨이 일련번호
  * @param {Number} p.doorNum               - 노드 번호
- * @param {String} p.metric                - 'angle_x' | 'angle_y'
+ * @param {String} p.metric                - 'angle_x' (⚠️ 'angle_y' 제외)
  * @param {Number|String} p.value          - 측정된 값 (보정 포함)
  * @param {Object} [p.raw]                 - 원본/보조 데이터
  */
 async function checkAndLogAngle({ gateway_serial, doorNum, metric, value, raw }) {
   // --------- 0) 파라미터 검증 ---------
-  const allowedMetrics = new Set(['angle_x', 'angle_y'])
+  // 'angle_y'는 제외: 'angle_x'만 허용
+  const allowedMetrics = new Set(['angle_x'])
   if (!allowedMetrics.has(metric)) return null
 
   const gatewaySerialStr = String(gateway_serial ?? '').trim()
@@ -76,7 +77,7 @@ async function checkAndLogAngle({ gateway_serial, doorNum, metric, value, raw })
     value: numericValue,
     threshold,
     raw: raw ?? null,
-    createdAt: new Date(), // ✅ 보정 없이 현재 시간 저장 (UTC 기준)
+    createdAt: new Date(), // ✅ UTC 기준 현재 시간
   })
 
   return doc

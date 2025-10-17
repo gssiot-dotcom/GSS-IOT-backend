@@ -11,6 +11,7 @@
 	"license": "ISC",
 	"description": "",
 	"dependencies": {
+		"adm-zip": "^0.5.16",
 		"assert": "^2.1.0",
 		"axios": "^1.7.9",
 		"bcryptjs": "^2.4.3",

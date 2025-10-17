@@ -17,7 +17,7 @@ const company_router = require('./routes/compnay.route') // 기존 철자 유지
 const angleCalibRoutes = require('./routes/angleCalibration.routes')
 const alertLogRouter = require('./routes/alertLog.routes')
 const weatherRoutes = require('./routes/weather.routes')
-
+const angleHistoryRoutes = require('./routes/angleHistory.routes');
 
 // ===== 서비스 =====
 const { setupSocket } = require('./services/Socket.service')
@@ -63,6 +63,7 @@ app.use(express.urlencoded({ extended: true }))
 app.use('/static', express.static(path.join(__dirname, 'static')))
 
 
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -101,10 +102,14 @@ app.use('/company', company_router)
 
 // 캘리브레이션 라우터 (CORS 이후, 한 번만)
 app.use('/api', angleCalibRoutes)
+//알람 라우터
 app.use('/api/alert-logs', alertLogRouter) 
-// ✅ 새로 추가: 날씨/기준치 API
+//날씨/기준치 API
 app.use('/api/weather', weatherRoutes)
-
+//보고서
+app.use('/api/reports', require('./routes/reportTable1.routes'));
+//최신값 반환
+app.use('/api', angleHistoryRoutes);
 // ===== 404 핸들러 =====
 app.use((req, res, next) => {
   if (res.headersSent) return next()
