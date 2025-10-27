@@ -110,6 +110,7 @@ app.use('/api/weather', weatherRoutes)
 //보고서
 app.use('/api/reports', require('./routes/reportTable1.routes'));
 app.use('/api/reports', reportDailyRoutes); 
+app.use(reportDailyRoutes);
 //최신값 반환
 app.use('/api', angleHistoryRoutes);
 //alive 반환

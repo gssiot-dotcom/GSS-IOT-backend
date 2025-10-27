@@ -19,17 +19,18 @@ async function fetchWeatherByCoords(lat, lon) {
   const params = { lat, lon, appid: OWM_KEY, units: 'metric' } // ℃
 
   const { data } = await axios.get(url, { params })
-
-  if (VERBOSE) {
-    console.log('[weather][owm][raw]', {
-      lat, lon,
-      main: data.weather?.[0]?.main,
-      temp: data.main?.temp,
-      hum: data.main?.humidity,
-      ws: data.wind?.speed,
-      deg: data.wind?.deg,
-    })
-  }
+  
+  //지오 코딩 콘솔 로그 출력 코드
+  // if (VERBOSE) {
+  //   console.log('[weather][owm][raw]', {
+  //     lat, lon,
+  //     main: data.weather?.[0]?.main,
+  //     temp: data.main?.temp,
+  //     hum: data.main?.humidity,
+  //     ws: data.wind?.speed,
+  //     deg: data.wind?.deg,
+  //   })
+  // }
 
   const weatherMain = data.weather?.[0]?.main || 'Clear'
   const windDeg = typeof data.wind?.deg === 'number' ? data.wind.deg : undefined
@@ -141,12 +142,14 @@ exports.ingestAllBuildingsWeather = async () => {
 
   const endedAt = new Date()
   const ms = endedAt - startedAt
-  console.log('[weather][done]', {
-    total, ok, fail, skip,
-    took_ms: ms,
-    startedAt: startedAt.toISOString(),
-    endedAt: endedAt.toISOString(),
-  })
+
+  // 콘솔 출력 로그 테스트 용
+  // console.log('[weather][done]', {
+  //   total, ok, fail, skip,
+  //   took_ms: ms,
+  //   startedAt: startedAt.toISOString(),
+  //   endedAt: endedAt.toISOString(),
+  // })
 
   return { total, ok, fail, skip, took_ms: ms }
 }
