@@ -23,9 +23,10 @@ const angleNodeRoutes = require('./routes/angleNode.routes')
 const { setupSocket } = require('./services/Socket.service')
 const { startHeartbeatJob } = require('./services/heartBeat.service')
 const { ingestAllBuildingsWeather } = require('./services/weatherIngest.service')
-
+const reportDailyRoutes = require('./routes/report.daily.routes'); // 보고서
 const app = express()
 const server = http.createServer(app)
+
 
 
 // 매 10분 실행(예시). 운영은 API 요금/쿼터 고려해서 조정.
@@ -108,10 +109,12 @@ app.use('/api/alert-logs', alertLogRouter)
 app.use('/api/weather', weatherRoutes)
 //보고서
 app.use('/api/reports', require('./routes/reportTable1.routes'));
+app.use('/api/reports', reportDailyRoutes); 
 //최신값 반환
 app.use('/api', angleHistoryRoutes);
 //alive 반환
 app.use('/api/angle-nodes', angleNodeRoutes)
+
 // ===== 404 핸들러 =====
 app.use((req, res, next) => {
   if (res.headersSent) return next()

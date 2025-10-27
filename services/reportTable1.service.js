@@ -139,15 +139,21 @@ function fillHwpxZipStrictBuffer(templatePath, map) {
     }
   }
 
-  // 4) 모든 XML에서 {{KEY}} 치환
-  for (const e of dst.getEntries()) {
-    if (!e.entryName.toLowerCase().endsWith('.xml')) continue;
-    let xml = e.getData().toString('utf8');
-    for (const [k, v] of Object.entries(map || {})) {
-      xml = xml.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), escapeXml(v));
-    }
-    dst.updateFile(e.entryName, Buffer.from(xml, 'utf8'));
+  // 4) 모든 XML에서 {{KEY}} 치환  ← 바로 위/아래에 추가
+for (const e of dst.getEntries()) {
+  if (!e.entryName.toLowerCase().endsWith('.xml')) continue;
+  let xml = e.getData().toString('utf8');
+
+  // 👍 추가: hp:lineSegArray 요소 통째 제거 (블록/셀프클로징 모두)
+  xml = xml.replace(/<hp:lineSegArray\b[^>]*>[\s\S]*?<\/hp:lineSegArray>/gi, '');
+  xml = xml.replace(/<hp:lineSegArray\b[^>]*\/>/gi, '');
+
+  for (const [k, v] of Object.entries(map || {})) {
+    xml = xml.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), escapeXml(v));
   }
+  dst.updateFile(e.entryName, Buffer.from(xml, 'utf8'));
+}
+
 
   // 5) Buffer로 반환 (파일 저장 X)
   return dst.toBuffer();
