@@ -172,7 +172,7 @@ async function buildXYWithNodeContextCsv({
       datetime
     ];
 
-    // 중복 키 구성 (모든 컬럼 조합)
+    // 중복 키 구성
     const key = rec.join('|§|');
     if (seen.has(key)) continue;
     seen.add(key);
