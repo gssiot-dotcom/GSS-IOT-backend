@@ -1,8 +1,8 @@
 // services/reportNodesCsv.service.js
-const mongoose = require('mongoose');
-const Building = require('../schema/Building.model');
-const Gateway  = require('../schema/Gateway.model');
-const AngleNode = require('../schema/Angle.node.model');
+const mongoose   = require('mongoose');
+const Building   = require('../schema/Building.model');
+const Gateway    = require('../schema/Gateway.model');
+const AngleNode  = require('../schema/Angle.node.model');
 const AngleNodeHistory = require('../schema/Angle.node.history.model');
 
 /** ================= 유틸 ================= */
@@ -65,6 +65,32 @@ function toKstDate(dateLike, isEnd = false) {
   return k;
 }
 
+// ======= 날짜 범위 보정 헬퍼 =======
+function addDaysUTC(d, days){
+  const nd = new Date(d.getTime());
+  nd.setUTCDate(nd.getUTCDate() + days);
+  return nd;
+}
+/**
+ * 쿼리에서 안전하게 날짜 범위 계산 (end는 미포함)
+ * - useKst=true 이면 KST 자정 기준 절단
+ * - end가 없거나 end <= start면 end = start + 1일
+ */
+function getDateRangeFromQuery({ start, end, useKst }) {
+  let startDate, endDate;
+  if (useKst) {
+    startDate = toKstDate(start) || new Date('1970-01-01T00:00:00Z');
+    // KST 모드에서 toKstDate(end, true)는 이미 +1일 처리된 경계(미포함)
+    endDate   = end ? toKstDate(end, true) : new Date();
+  } else {
+    startDate = start ? new Date(start) : new Date('1970-01-01T00:00:00Z');
+    endDate   = end ? new Date(end)     : new Date();
+    if (!end || endDate <= startDate) endDate = addDaysUTC(startDate, 1);
+  }
+  if (endDate <= startDate) endDate = addDaysUTC(startDate, 1);
+  return { startDate, endDate };
+}
+
 /** ================= 조회 ================= */
 async function fetchBuilding(buildingId){
   const b = await Building.findById(buildingId).lean();
@@ -85,9 +111,11 @@ async function fetchAngleNodes(gatewayIds){
   ).lean();
 }
 
-/** ================= CSV 빌더 (요청 포맷) =================
- * 출력 컬럼(기본/권장):
+/** ================= CSV 빌더 (요청 포맷 + 중복 제거) =================
+ * 출력 컬럼(기본):
  * doorNum, gateway_serial, gateway_zone, node_position, angle_x, angle_y, datetime
+ * - datetime: YYYY-MM-DD HH:MM:SS (기본 KST)
+ * - 완전 동일 레코드(위 7개 전부)가 중복이면 1개만 남김
  */
 async function buildXYWithNodeContextCsv({
   buildingId, startDate, endDate, useKst, filenameBase
@@ -118,6 +146,9 @@ async function buildXYWithNodeContextCsv({
     return { csvBuffer: csv, filename };
   }
 
+  // 중복 제거를 위한 Set (문자열 키)
+  const seen = new Set();
+
   const cursor = AngleNodeHistory
     .find(
       { doorNum: { $in: doorNums }, createdAt: { $gte: startDate, $lt: endDate } },
@@ -129,15 +160,24 @@ async function buildXYWithNodeContextCsv({
   for await (const h of cursor){
     const node = nodeByDoor.get(h.doorNum) || {};
     const gw   = gwCtxByDoor.get(h.doorNum) || { serial:'', zone:'' };
-    rows.push([
+
+    const datetime = fmtYmdHms(h.createdAt, !!useKst);
+    const rec = [
       h.doorNum,
       gw.serial,
       gw.zone,
       node.position || '',
       h.angle_x ?? '',
       h.angle_y ?? '',
-      fmtYmdHms(h.createdAt, !!useKst)
-    ]);
+      datetime
+    ];
+
+    // 중복 키 구성 (모든 컬럼 조합)
+    const key = rec.join('|§|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    rows.push(rec);
   }
 
   const csv = rowsToCsv(rows);
@@ -149,10 +189,12 @@ async function buildXYWithNodeContextCsv({
 async function nodesCsvHandler(req, res) {
   try {
     const { buildingId } = req.params;
-    const { start, end, useKst } = req.query;
+    const { start, end } = req.query;
 
-    const startDate = useKst ? (toKstDate(start) || new Date('1970-01-01')) : (start ? new Date(start) : new Date('1970-01-01'));
-    const endDate   = useKst ? (toKstDate(end, true) || new Date())          : (end ? new Date(end) : new Date());
+    // 기본값을 KST로 고정
+    const useKst = true;
+
+    const { startDate, endDate } = getDateRangeFromQuery({ start, end, useKst });
 
     const { csvBuffer, filename } = await buildXYWithNodeContextCsv({
       buildingId, startDate, endDate, useKst, filenameBase: 'nodes.xy'
@@ -166,6 +208,7 @@ async function nodesCsvHandler(req, res) {
     res.status(500).json({ message: 'nodes csv 생성 중 오류', error: String(err?.message || err) });
   }
 }
+
 
 
 module.exports = {

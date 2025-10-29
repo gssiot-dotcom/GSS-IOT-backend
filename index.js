@@ -19,6 +19,7 @@ const alertLogRouter = require('./routes/alertLog.routes')
 const weatherRoutes = require('./routes/weather.routes')
 const angleHistoryRoutes = require('./routes/angleHistory.routes');
 const angleNodeRoutes = require('./routes/angleNode.routes')
+const reportNodesCsvRouter = require('./routes/report.nodes.csv.routes');
 // ===== 서비스 =====
 const { setupSocket } = require('./services/Socket.service')
 const { startHeartbeatJob } = require('./services/heartBeat.service')
@@ -115,6 +116,7 @@ app.use(reportDailyRoutes);
 app.use('/api', angleHistoryRoutes);
 //alive 반환
 app.use('/api/angle-nodes', angleNodeRoutes)
+app.use('/api/reports', reportNodesCsvRouter);
 
 // ===== 404 핸들러 =====
 app.use((req, res, next) => {
