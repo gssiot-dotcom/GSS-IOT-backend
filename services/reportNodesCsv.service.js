@@ -23,6 +23,7 @@ function fmtYmdHms(dateLike, useKst=false){
   return `${y}-${pad2(M)}-${pad2(D)} ${pad2(h)}:${pad2(m)}:${pad2(s)}`;
 }
 
+// CSV 안전 값
 function toCsvValue(v){
   if (v === null || v === undefined) return '';
   const s = String(v);
@@ -31,7 +32,7 @@ function toCsvValue(v){
 }
 function rowsToCsv(rows){ return rows.map(r => r.map(toCsvValue).join(',')).join('\n'); }
 
-/** 파일명 안전 처리 + RFC5987 (UTF-8) 인코딩 */
+// 파일명 안전 처리 + RFC5987 (UTF-8) 인코딩
 function encodeRFC5987ValueChars (str) {
   return encodeURIComponent(str)
     .replace(/['()]/g, escape)
@@ -54,11 +55,10 @@ function buildContentDisposition(filename) {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
-/** 날짜 파라미터를 KST 자정 경계로 절단(옵션) */
+// 날짜 파라미터를 KST 자정 경계로 절단(옵션)
 function toKstDate(dateLike, isEnd = false) {
   if (!dateLike) return null;
   const d = new Date(dateLike);
-  // UTC 자정으로 맞춘 뒤 -9h => KST 자정과 같은 순간의 UTC 시각
   const k = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   if (isEnd) k.setUTCDate(k.getUTCDate() + 1);
   k.setUTCHours(k.getUTCHours() - 9);
@@ -80,7 +80,6 @@ function getDateRangeFromQuery({ start, end, useKst }) {
   let startDate, endDate;
   if (useKst) {
     startDate = toKstDate(start) || new Date('1970-01-01T00:00:00Z');
-    // KST 모드에서 toKstDate(end, true)는 이미 +1일 처리된 경계(미포함)
     endDate   = end ? toKstDate(end, true) : new Date();
   } else {
     startDate = start ? new Date(start) : new Date('1970-01-01T00:00:00Z');
@@ -111,10 +110,10 @@ async function fetchAngleNodes(gatewayIds){
   ).lean();
 }
 
-/** ================= CSV 빌더 (요청 포맷 + 중복 제거) =================
- * 출력 컬럼(기본):
- * doorNum, gateway_serial, gateway_zone, node_position, angle_x, angle_y, datetime
- * - datetime: YYYY-MM-DD HH:MM:SS (기본 KST)
+/** ================= CSV 빌더 (한국어 컬럼 + 중복 제거) =================
+ * 출력 컬럼(한국어):
+ * 문번호, 게이트웨이시리얼, 게이트웨이구역, 노드구역, X각도(°), Y각도(°), 기록시각
+ * - 기록시각: YYYY-MM-DD HH:MM:SS (기본 KST)
  * - 완전 동일 레코드(위 7개 전부)가 중복이면 1개만 남김
  */
 async function buildXYWithNodeContextCsv({
@@ -138,7 +137,8 @@ async function buildXYWithNodeContextCsv({
   const doorNums = nodes.map(n => n.doorNum);
 
   const rows = [];
-  rows.push(['doorNum','gateway_serial','gateway_zone','node_position','angle_x','angle_y','datetime']);
+  // ✅ 한국어 헤더
+  rows.push(['문번호','게이트웨이시리얼','게이트웨이구역','노드구역','X각도(°)','Y각도(°)','기록시각']);
 
   if (!doorNums.length) {
     const csv = rowsToCsv(rows);
@@ -172,7 +172,7 @@ async function buildXYWithNodeContextCsv({
       datetime
     ];
 
-    // 중복 키 구성
+    // 중복 키 구성 (7개 컬럼 전부)
     const key = rec.join('|§|');
     if (seen.has(key)) continue;
     seen.add(key);
@@ -208,8 +208,6 @@ async function nodesCsvHandler(req, res) {
     res.status(500).json({ message: 'nodes csv 생성 중 오류', error: String(err?.message || err) });
   }
 }
-
-
 
 module.exports = {
   nodesCsvHandler

@@ -1,5 +1,5 @@
 // services/weatherIngest.service.js
-// 빌딩 주소 -> 지오코딩 -> 날씨 호출 -> Weather 저장
+// 빌딩 주소 -> 지오코딩 -> 날씨 호출 -> Weather 저장 (+ 태풍 EFF만 추가)
 // 저장/실패/스킵 모두 콘솔 로그 출력
 
 const axios = require('axios')
@@ -9,6 +9,7 @@ const { geocodeAddress } = require('./geocode.service')   // services/geocode.se
 const { degToCompass } = require('../utils/wind')         // utils/wind.js
 
 const OWM_KEY = process.env.OWM_API_KEY
+const KMA_KEY = process.env.KMA_API_KEY   // ← 추가: 기상청 API 허브 키(태풍 EFF 조회용)
 const VERBOSE = (process.env.LOG_VERBOSE || 'false').toLowerCase() === 'true'
 
 // ───────────────────────────────────────────────────────────────
@@ -46,6 +47,66 @@ async function fetchWeatherByCoords(lat, lon) {
 }
 
 // ───────────────────────────────────────────────────────────────
+// 내부: 기상청 API 허브 typ01 목록으로 최신 태풍 EFF(1~4) 가져오기
+// 실패/미응답 시 4(없음) 반환
+// ───────────────────────────────────────────────────────────────
+function utcNowYYYYMMDDHHmm() {
+  const d = new Date()
+  const y = d.getUTCFullYear()
+  const M = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const D = String(d.getUTCDate()).padStart(2, '0')
+  const h = String(d.getUTCHours()).padStart(2, '0')
+  const m = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${y}${M}${D}${h}${m}`
+}
+
+function clean(s) {
+  return (s ?? '').toString().trim().replace(/^"+|"+$/g, '')
+}
+
+/**
+ * 기상청 API 허브 typ01 목록
+ * - URL: https://apihub.kma.go.kr/api/typ01/url/typ_lst.php
+ * - 파라미터: tm(UTC, 과거12h), disp=1(CSV), help=0, authKey=KMA_KEY
+ * - 응답 CSV의 4번째 컬럼(EFF)을 1|2|3|4로 해석
+ */
+async function fetchLatestTyphoonEFF() {
+  try {
+    if (!KMA_KEY) {
+      if (VERBOSE) console.warn('[typhoon][eff] KMA_API_KEY missing, fallback 4')
+      return 4
+    }
+    const url = 'https://apihub.kma.go.kr/api/typ01/url/typ_lst.php'
+    const params = {
+      tm: utcNowYYYYMMDDHHmm(),
+      disp: 1,
+      help: 0,
+      authKey: KMA_KEY,
+    }
+    const { data: text } = await axios.get(url, { params, responseType: 'text', timeout: 15000 })
+
+    const lines = String(text).split(/\r?\n/).map(l => l.trim()).filter(l =>
+      l && !/^#/.test(l) && !/^=/.test(l) && !/^\/\//.test(l) && !/^---/.test(l)
+    )
+
+    // 가장 최신 한 줄만 보고 EFF 파싱(컬럼 4 = index 3)
+    for (const raw of lines) {
+      const cols = raw.split(',').map(clean)
+      const eff = parseInt(cols[3], 10) // 1:상륙, 2:직접영향, 3:간접영향, 4:없음
+      if ([1, 2, 3, 4].includes(eff)) {
+        if (VERBOSE) console.log('[typhoon][eff] parsed:', eff)
+        return eff
+      }
+    }
+    if (VERBOSE) console.warn('[typhoon][eff] no valid EFF found, fallback 4')
+    return 4
+  } catch (e) {
+    if (VERBOSE) console.warn('[typhoon][eff] fetch fail:', e.message)
+    return 4
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
 // 공개: 전체 빌딩 순회 수집
 // ───────────────────────────────────────────────────────────────
 exports.ingestAllBuildingsWeather = async () => {
@@ -56,6 +117,9 @@ exports.ingestAllBuildingsWeather = async () => {
 
   const startedAt = new Date()
   console.log('[weather][start]', { at: startedAt.toISOString() })
+
+  // ✨ 실행 시점의 태풍 영향도 1회 조회(전국 공통 적용)
+  const typhoonEff = await fetchLatestTyphoonEFF() // 1~4, 실패 시 4
 
   // 주소가 있는 빌딩만
   const cursor = Building.find(
@@ -102,7 +166,7 @@ exports.ingestAllBuildingsWeather = async () => {
       continue
     }
 
-    // 3) 저장
+    // 3) 저장 (+ 태풍 영향도 한 줄)
     try {
       const saved = await Weather.create({
         building: b._id,
@@ -112,6 +176,9 @@ exports.ingestAllBuildingsWeather = async () => {
         humidity: w.humidity,
         wind_speed: w.wind_speed,
         timestamp: w.timestamp,
+
+        // ✅ 추가: 태풍 영향(EFF) — 1:상륙, 2:직접영향, 3:간접영향, 4:없음
+        typhoon_eff: typhoonEff,
       })
 
       ok++
@@ -124,6 +191,7 @@ exports.ingestAllBuildingsWeather = async () => {
         hum: saved.humidity,
         ws: saved.wind_speed,
         ts: saved.timestamp?.toISOString?.() || saved.timestamp,
+        eff: saved.typhoon_eff,
       })
     } catch (e) {
       fail++
@@ -142,14 +210,6 @@ exports.ingestAllBuildingsWeather = async () => {
 
   const endedAt = new Date()
   const ms = endedAt - startedAt
-
-  // 콘솔 출력 로그 테스트 용
-  // console.log('[weather][done]', {
-  //   total, ok, fail, skip,
-  //   took_ms: ms,
-  //   startedAt: startedAt.toISOString(),
-  //   endedAt: endedAt.toISOString(),
-  // })
 
   return { total, ok, fail, skip, took_ms: ms }
 }
