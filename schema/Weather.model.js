@@ -7,6 +7,7 @@ const EFF_CODES  = { '상륙':1, '직접영향':2, '간접영향':3, '없음':4 
 
 function add9h(v){ const t=new Date(v||Date.now()); return new Date(t.getTime()+9*60*60*1000) }
 
+
 const weatherSchema = new mongoose.Schema({
   building: { type: mongoose.Schema.Types.ObjectId, ref: 'Building', required: true, index: true },
   weather:  { type: String, required: true },
