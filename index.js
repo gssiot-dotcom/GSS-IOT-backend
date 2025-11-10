@@ -54,7 +54,7 @@ const allowedOrigins = [
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'PATCH'],
     credentials: true,
   },
 })
@@ -119,7 +119,7 @@ app.use('/api', angleHistoryRoutes);
 app.use('/api/angle-nodes', angleNodeRoutes)
 app.use('/api/reports', reportNodesCsvRouter);
 //Save_status
-app.use('/api/nodes', angleNodeSaveStatusRoutes)
+app.use('/api/nodes', angleNodeSaveStatusRoutes);
 // ===== 404 핸들러 =====
 app.use((req, res, next) => {
   if (res.headersSent) return next()
