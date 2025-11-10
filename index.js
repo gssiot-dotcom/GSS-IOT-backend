@@ -54,7 +54,7 @@ const allowedOrigins = [
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PATCH'],
+    methods: ['GET', 'POST', ],
     credentials: true,
   },
 })
@@ -73,7 +73,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
       return callback(new Error('CORS policy violation: ' + origin))
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   })
