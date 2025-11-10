@@ -16,8 +16,11 @@ const angleNodeSchema = new mongoose.Schema(
     calibrated_y: { type: Number, default: 0 },
 
     angle_node_img: { type: String, default: '' },
-    node_status: { type: Boolean, default: true }, // true means available
+    save_status: { type: Boolean, default: true }, // 값을 저장할지 말지 판별해주는 컬럼 추가
+    save_status_lastSeen: { type: Date, default: null }, // save_status가 마지막으로 변경된 시각
+    node_status: { type: Boolean, default: true }, // 게이트웨이에 할당할 수 있는지 보여주는 컬럼
     position: { type: String, default: '' },
+    
 
     gateway_id: {
       type: mongoose.Schema.ObjectId,

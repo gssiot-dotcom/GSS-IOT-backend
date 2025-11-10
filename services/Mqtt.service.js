@@ -1,3 +1,4 @@
+// services/Mqtt.service.js
 const mqtt = require('mqtt')
 const NodeHistorySchema = require('../schema/History.model')
 const NodeSchema = require('../schema/Node.model')
@@ -8,6 +9,7 @@ const AngleNodeSchema = require('../schema/Angle.node.model')
 const { logger, logError, logInfo } = require('../lib/logger')
 const GatewaySchema = require('../schema/Gateway.model')
 const AngleCalibration = require('../schema/Angle.Calibration.model') // ✅ 보정 테이블
+
 // 메시지를 다른 곳에 전달하기 위해 EventEmitter 사용
 const mqttEmitter = new EventEmitter()
 
@@ -23,14 +25,14 @@ const gwResTopic = 'GSSIOT/01030369081/GATE_RES/'
 
 // ================= MQTT LOGICS =============== //
 
-// MQTT 서버 연결
+// MQTT 서버 연결 (기존 구조 유지)
 const mqttClient = mqtt.connect('mqtt://gssiot.iptime.org:10200', {
   username: '01030369081',
   password: 'qwer1234',
   // connectTimeout: 30 * 1000,
 })
 
-// 연결 성공 시 구독 처리
+// 연결 성공 시 구독 처리 (기존 구조 유지)
 mqttClient.on('connect', () => {
   logger('Connected to GSSIOT MQTT server')
   allTopics.forEach(topic => {
@@ -159,18 +161,21 @@ const emitGwRes = data => {
   mqttEmitter.emit('gwPubRes', data)
 }
 
+// ───────────────────────────────────────────────────────────────
+// 각도 노드 처리 (save_status 가드만 추가된 최소 변경)
+// ───────────────────────────────────────────────────────────────
 async function handleIncomingAngleNodeData(payload) {
   const { gateway_number, doorNum, angle_x, angle_y } = payload
   const now = new Date()
 
-  // Node 상태 업데이트 (lastSeen / alive)
+  // Node 상태 업데이트 (lastSeen / alive) — 상태는 항상 기록
   await AngleNodeSchema.updateOne(
     { doorNum },
     { $set: { lastSeen: now, node_alive: true } },
     { upsert: true }
   )
 
-  // Gateway 상태 업데이트 (lastSeen / alive)
+  // Gateway 상태 업데이트 (lastSeen / alive) — 상태는 항상 기록
   await GatewaySchema.updateOne(
     { serial_number: gateway_number },
     {
@@ -179,6 +184,28 @@ async function handleIncomingAngleNodeData(payload) {
     },
     { upsert: true }
   )
+
+  // ⬇⬇⬇ 여기 추가: save_status 가드 (값 저장 / 히스토리 / 알림 / 보정 스킵) ⬇⬇⬇
+  try {
+    const nodeDoc = await AngleNodeSchema.findOne({ doorNum }).lean()
+    const saveAllowed = nodeDoc?.save_status !== false // 기본 true, false면 저장 금지
+    if (!saveAllowed) {
+      // 상태 이벤트만 전달(대시보드용)
+      mqttEmitter.emit('mqttAngleMessage', {
+        doorNum,
+        gw_number: gateway_number,
+        node_alive: true,
+        lastSeen: now,
+        save_skipped: true,
+      })
+      logger(`save_status=false → 값 저장/히스토리/알림/보정 스킵 (door ${doorNum})`)
+      return
+    }
+  } catch (e) {
+    // save_status 조회 실패 시에는 안전하게 저장을 계속하도록 함(운영 안전성)
+    logError('save_status 확인 중 오류:', e?.message || e)
+  }
+  // ⬆⬆⬆ 가드 끝 ⬆⬆⬆
 
   // ===== 보정값 조회/수집 처리 =====
   let calibDoc = await AngleCalibration.findOne({ doorNum }).lean()
@@ -277,21 +304,21 @@ async function handleIncomingAngleNodeData(payload) {
   }).save()
 
   // ✅ 빌딩 연결된 게이트웨이일 때만, 보정값 기준으로 알림 로그 적재(yellow/red만)
-const { checkAndLogAngle } = require('../services/Alert.service')
- await checkAndLogAngle({
-   gateway_serial: String(gateway_number),
-   doorNum,
-   metric: 'angle_x',
-   value: Number(calibratedX),
-   raw: { angle_x, angle_y, calibratedX, calibratedY }
- })
- await checkAndLogAngle({
-   gateway_serial: String(gateway_number),
-   doorNum,
-  metric: 'angle_y',
-   value: Number(calibratedY),
-   raw: { angle_x, angle_y, calibratedX, calibratedY }
- })
+  const { checkAndLogAngle } = require('../services/Alert.service')
+  await checkAndLogAngle({
+    gateway_serial: String(gateway_number),
+    doorNum,
+    metric: 'angle_x',
+    value: Number(calibratedX),
+    raw: { angle_x, angle_y, calibratedX, calibratedY }
+  })
+  await checkAndLogAngle({
+    gateway_serial: String(gateway_number),
+    doorNum,
+    metric: 'angle_y',
+    value: Number(calibratedY),
+    raw: { angle_x, angle_y, calibratedX, calibratedY }
+  })
 
   // 이벤트 전달
   mqttEmitter.emit('mqttAngleMessage', updatedAngleNode)

@@ -20,7 +20,7 @@ function toDoorNum(v) {
  *       gateway_id: 특정 게이트웨이 ObjectId 필터 (옵션)
  *       alive: true|false (옵션, 생존 여부 필터)
  *       doorNums: "1,2,3" (옵션, 특정 도어번호들만)
- *   - 응답: [{ doorNum, node_alive, lastSeen, updatedAt }]
+ *   - 응답: [{ doorNum, node_alive, lastSeen, updatedAt, save_status, save_status_lastSeen }]
  */
 router.get('/alive', async (req, res) => {
   try {
@@ -40,11 +40,17 @@ router.get('/alive', async (req, res) => {
     }
 
     const rows = await AngleNode.find(q)
-      .select('doorNum node_alive lastSeen updatedAt')
+      .select('doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen')
       .sort({ doorNum: 1 })
       .lean()
 
-    res.json(rows)
+    // save_status가 없는 문서는 기본 true로 보이도록 정규화
+    const normalized = rows.map(r => ({
+      ...r,
+      save_status: (r.save_status === undefined ? true : r.save_status),
+    }))
+
+    res.json(normalized)
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Failed to fetch node_alive list' })
@@ -54,7 +60,7 @@ router.get('/alive', async (req, res) => {
 /**
  * GET /api/angle-nodes/:doorNum/alive
  * 단일 도어번호의 node_alive 상태 조회
- *   - 응답: { doorNum, node_alive, lastSeen, updatedAt }
+ *   - 응답: { doorNum, node_alive, lastSeen, updatedAt, save_status, save_status_lastSeen }
  */
 router.get('/:doorNum/alive', async (req, res) => {
   try {
@@ -64,14 +70,20 @@ router.get('/:doorNum/alive', async (req, res) => {
     }
 
     const doc = await AngleNode.findOne({ doorNum })
-      .select('doorNum node_alive lastSeen updatedAt')
+      .select('doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen')
       .lean()
 
     if (!doc) {
       return res.status(404).json({ message: 'Angle node not found' })
     }
 
-    res.json(doc)
+    // save_status가 없는 문서는 기본 true로 보이도록 정규화
+    const normalized = {
+      ...doc,
+      save_status: (doc.save_status === undefined ? true : doc.save_status),
+    }
+
+    res.json(normalized)
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Failed to fetch node_alive' })

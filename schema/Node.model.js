@@ -1,3 +1,4 @@
+//해치발판 노드
 const mongoose = require('mongoose')
 
 const nodeSchema = new mongoose.Schema({
