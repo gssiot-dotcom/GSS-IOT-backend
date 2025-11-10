@@ -23,6 +23,35 @@ const nodeTopic = 'GSSIOT/01030369081/GATE_PUB/'
 const angleTopic = 'GSSIOT/01030369081/GATE_ANG/'
 const gwResTopic = 'GSSIOT/01030369081/GATE_RES/'
 
+
+// ───────────────────────────────────────────────────────────────
+// 위치 스냅샷: 1순위 게이트웨이 zone_name → 2순위 노드 position
+// ───────────────────────────────────────────────────────────────
+async function resolveHistoryPosition(gatewaySerial, doorNum) {
+  try {
+    const gw = await GatewaySchema
+      .findOne({ serial_number: gatewaySerial })
+      .select('zone_name')
+      .lean();
+    if (gw?.zone_name) return String(gw.zone_name);
+  } catch (e) {
+    logError('resolveHistoryPosition gw lookup error:', e?.message || e);
+  }
+
+  try {
+    const node = await AngleNodeSchema
+      .findOne({ doorNum })
+      .select('position')
+      .lean();
+    if (node?.position) return String(node.position);
+  } catch (e) {
+    logError('resolveHistoryPosition node lookup error:', e?.message || e);
+  }
+
+  return '';
+}
+
+
 // ================= MQTT LOGICS =============== //
 
 // MQTT 서버 연결 (기존 구조 유지)
@@ -295,13 +324,18 @@ async function handleIncomingAngleNodeData(payload) {
     { new: true, upsert: true }
   )
 
-  // AngleNodeHistory: 보정값만 저장
-  await new AngleNodeHistory({
-    gw_number: gateway_number,
-    doorNum,
-    angle_x: calibratedX, // 보정 적용된 값
-    angle_y: calibratedY, // 보정 적용된 값
-  }).save()
+  // ★ 스냅샷 위치 계산 (게이트웨이 zone_name → 없으면 노드 position)
+const histPosition = await resolveHistoryPosition(String(gateway_number), doorNum);
+
+// AngleNodeHistory: 보정값 + 위치 스냅샷 저장
+await new AngleNodeHistory({
+  gw_number: gateway_number,
+  doorNum,
+  angle_x: calibratedX, // 보정 적용된 값
+  angle_y: calibratedY, // 보정 적용된 값
+  position: histPosition // ★ 그 시점의 위치를 고정 저장
+}).save()
+
 
   // ✅ 빌딩 연결된 게이트웨이일 때만, 보정값 기준으로 알림 로그 적재(yellow/red만)
   const { checkAndLogAngle } = require('../services/Alert.service')
