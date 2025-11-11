@@ -6,7 +6,6 @@ const cookieParser = require('cookie-parser')
 const cors = require('cors')
 const { Server } = require('socket.io')
 const path = require('path')
-
 const cron = require('node-cron')
 
 
@@ -21,6 +20,8 @@ const angleHistoryRoutes = require('./routes/angleHistory.routes');
 const angleNodeRoutes = require('./routes/angleNode.routes')
 const reportNodesCsvRouter = require('./routes/report.nodes.csv.routes');
 const angleNodeSaveStatusRoutes = require('./routes/angleNode.saveStatus.routes')
+const gatewayPositionRoutes = require('./routes/gateway.position.routes')
+
 // ===== 서비스 =====
 const { setupSocket } = require('./services/Socket.service')
 const { startHeartbeatJob } = require('./services/heartBeat.service')
@@ -118,6 +119,8 @@ app.use('/api', angleHistoryRoutes);
 //alive 반환
 app.use('/api/angle-nodes', angleNodeRoutes)
 app.use('/api/reports', reportNodesCsvRouter);
+//게이트웨이 위치 변경
+app.use('/api/gateways', gatewayPositionRoutes)
 //Save_status
 app.use('/api/nodes', angleNodeSaveStatusRoutes);
 // ===== 404 핸들러 =====

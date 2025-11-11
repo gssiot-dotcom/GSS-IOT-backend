@@ -18,7 +18,12 @@ const AngleNodeHistorySchema = new mongoose.Schema({
 		required: false,
 		default: 0,
 	},
-	position: {
+	gw_position: {
+		type: String,
+		required: false,
+		default: '',
+	},
+	node_position: {
 		type: String,
 		required: false,
 		default: '',
