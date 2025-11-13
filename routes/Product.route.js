@@ -41,6 +41,11 @@ product_router.post(
 	'/combine-angle-nodes',
 	productController.combineAngleNodeToGateway
 )
+product_router.post(
+  '/combine-nodes',
+  productController.combineNodesToGateway
+)
+
 
 // ========================== Angle-Node-Graphic routes ================================== //
 product_router.get('/angle-node/data', productController.angleNodeGraphicData)

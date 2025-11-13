@@ -14,13 +14,44 @@ companyController.createBuilding = async (req, res) => {
 		res.json({
 			state: 'succcess',
 			building: result,
-			message: '빌딩이 생성돼었읍니다',
+			message: '빌딩이 생성돼었습니다',
 		})
 	} catch (error) {
 		logError(error.message)
 		res.json({ state: 'fail', message: error.message })
 	}
 }
+
+companyController.changeGatewayBuilding = async (req, res) => {
+	try {
+		logger('request: changeGatewayBuilding')
+		const { gateway_id, building_id } = req.body
+
+		if (!gateway_id || !building_id) {
+			return res
+				.status(400)
+				.json({ state: 'fail', message: 'gateway_id와 building_id가 필요합니다.' })
+		}
+
+		const companyService = new CompanyService()
+		const result = await companyService.moveGatewayToBuildingData(
+			gateway_id,
+			building_id
+		)
+
+		return res.json({
+			state: 'success',
+			message: '게이트웨이의 빌딩이 변경되었습니다.',
+			data: result,
+		})
+	} catch (error) {
+		logError(error.message)
+		return res
+			.status(500)
+			.json({ state: 'fail', message: error.message })
+	}
+}
+
 
 companyController.getActiveBuildings = async (req, res) => {
 	try {

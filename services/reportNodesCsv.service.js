@@ -138,7 +138,7 @@ async function buildXYWithNodeContextCsv({
   const doorNums = nodes.map(n => n.doorNum);
 
   const rows = [];
-  rows.push(['doorNum','gateway_serial','gateway_zone','node_position','angle_x','angle_y','datetime']);
+  rows.push(['노드 번호','게이트웨이 번호','게이트웨이 위치','노드 위치','X값','Y값','시간']);
 
   if (!doorNums.length) {
     const csv = rowsToCsv(rows);

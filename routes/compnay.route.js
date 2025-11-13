@@ -23,6 +23,11 @@ company_router.delete(
 	'/delete/building/:buildingId',
 	companyController.deleteBuilding
 )
+// 🔹 여기 추가
+company_router.put(
+	'/building/change-gateway-building',
+	companyController.changeGatewayBuilding
+)
 
 company_router.put('/building/set-alarm-level', companyController.setAlarmLevel)
 
