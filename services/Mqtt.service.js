@@ -23,34 +23,37 @@ const nodeTopic = 'GSSIOT/01030369081/GATE_PUB/'
 const angleTopic = 'GSSIOT/01030369081/GATE_ANG/'
 const gwResTopic = 'GSSIOT/01030369081/GATE_RES/'
 
-
 // ───────────────────────────────────────────────────────────────
-// 위치 스냅샷: 1순위 게이트웨이 zone_name → 2순위 노드 position
+// 헬퍼: gw_number(끝 4자리) → Gateway.serial_number 끝 4자리 매칭 → zone_name
+//       doorNum → AngleNode.position (각도 노드 기준)
 // ───────────────────────────────────────────────────────────────
-async function resolveHistoryPosition(gatewaySerial, doorNum) {
+async function findGatewayZoneByGwNumber(gwNumber) {
   try {
+    const last4 = String(gwNumber || '').slice(-4)
+    if (!last4) return ''
     const gw = await GatewaySchema
-      .findOne({ serial_number: gatewaySerial })
+      .findOne({ serial_number: { $regex: `${last4}$` } })
       .select('zone_name')
-      .lean();
-    if (gw?.zone_name) return String(gw.zone_name);
+      .lean()
+    return gw?.zone_name ? String(gw.zone_name) : ''
   } catch (e) {
-    logError('resolveHistoryPosition gw lookup error:', e?.message || e);
+    logError('findGatewayZoneByGwNumber error:', e?.message || e)
+    return ''
   }
-
-  try {
-    const node = await AngleNodeSchema
-      .findOne({ doorNum })
-      .select('position')
-      .lean();
-    if (node?.position) return String(node.position);
-  } catch (e) {
-    logError('resolveHistoryPosition node lookup error:', e?.message || e);
-  }
-
-  return '';
 }
 
+async function getAngleNodePositionByDoorNum(doorNum) {
+  try {
+    const node = await AngleNodeSchema
+      .findOne({ doorNum: Number(doorNum) })
+      .select('position')
+      .lean()
+    return node?.position ? String(node.position) : ''
+  } catch (e) {
+    logError('getAngleNodePositionByDoorNum error:', e?.message || e)
+    return ''
+  }
+}
 
 // ================= MQTT LOGICS =============== //
 
@@ -82,7 +85,7 @@ mqttClient.on('message', async (topic, message) => {
     // MQTT 메시지 파싱
     const data = JSON.parse(message.toString())
 
-    // 게이트웨이 번호 추출 (토픽의 마지막 조각 기준)
+    // 게이트웨이 번호 추출 (토픽의 마지막 조각 기준) → 끝 4자리 사용 (기존 유지)
     const gatewayNumber = topic.split('/').pop().slice(-4)
 
     // 현재 시간 (서울 기준, 24시간제)
@@ -128,7 +131,7 @@ mqttClient.on('message', async (topic, message) => {
         return
       }
 
-      // History 저장
+      // NodeHistory 저장(요구 없었으므로 기존 그대로)
       const mqttEventSchema = new NodeHistorySchema(eventData)
       try {
         await mqttEventSchema.save()
@@ -140,10 +143,7 @@ mqttClient.on('message', async (topic, message) => {
       // 이벤트 전달
       mqttEmitter.emit('mqttMessage', updatedNode)
 
-      // 문이 열릴 때 텔레그램 알림 전송 (현재 비활성화)
-      // if (data.doorChk === 1) {
-      //   await notifyUsersOfOpenDoor(data.doorNum)
-      // }
+      // if (data.doorChk === 1) { await notifyUsersOfOpenDoor(data.doorNum) }
     }
 
     // ================== Gateway 응답 처리 ==================
@@ -197,14 +197,14 @@ async function handleIncomingAngleNodeData(payload) {
   const { gateway_number, doorNum, angle_x, angle_y } = payload
   const now = new Date()
 
-  // Node 상태 업데이트 (lastSeen / alive) — 상태는 항상 기록
+  // Node 상태 업데이트 (lastSeen / alive)
   await AngleNodeSchema.updateOne(
     { doorNum },
     { $set: { lastSeen: now, node_alive: true } },
     { upsert: true }
   )
 
-  // Gateway 상태 업데이트 (lastSeen / alive) — 상태는 항상 기록
+  // Gateway 상태 업데이트 (lastSeen / alive)
   await GatewaySchema.updateOne(
     { serial_number: gateway_number },
     {
@@ -214,12 +214,11 @@ async function handleIncomingAngleNodeData(payload) {
     { upsert: true }
   )
 
-  // ⬇⬇⬇ 여기 추가: save_status 가드 (값 저장 / 히스토리 / 알림 / 보정 스킵) ⬇⬇⬇
+  // save_status 가드
   try {
     const nodeDoc = await AngleNodeSchema.findOne({ doorNum }).lean()
-    const saveAllowed = nodeDoc?.save_status !== false // 기본 true, false면 저장 금지
+    const saveAllowed = nodeDoc?.save_status !== false // 기본 true
     if (!saveAllowed) {
-      // 상태 이벤트만 전달(대시보드용)
       mqttEmitter.emit('mqttAngleMessage', {
         doorNum,
         gw_number: gateway_number,
@@ -231,15 +230,12 @@ async function handleIncomingAngleNodeData(payload) {
       return
     }
   } catch (e) {
-    // save_status 조회 실패 시에는 안전하게 저장을 계속하도록 함(운영 안전성)
     logError('save_status 확인 중 오류:', e?.message || e)
   }
-  // ⬆⬆⬆ 가드 끝 ⬆⬆⬆
 
   // ===== 보정값 조회/수집 처리 =====
   let calibDoc = await AngleCalibration.findOne({ doorNum }).lean()
 
-  // 엔드포인트로 collecting=true가 된 상태라면 → 합/카운트 누적
   if (calibDoc?.collecting) {
     const newCount = (calibDoc.sampleCount ?? 0) + 1
     const newSumX = (calibDoc.sumX ?? 0) + Number(angle_x ?? 0)
@@ -247,7 +243,7 @@ async function handleIncomingAngleNodeData(payload) {
     const target = calibDoc.sampleTarget ?? 5
 
     if (newCount >= target) {
-      // ✅ 평균 계산 후 offset 확정
+      // 평균 계산 후 offset 확정
       const avgX = newSumX / newCount
       const avgY = newSumY / newCount
 
@@ -267,7 +263,7 @@ async function handleIncomingAngleNodeData(payload) {
         }
       )
 
-      // 메모리상의 최신 상태 반영(이 아래 계산에 사용)
+      // 메모리 최신 상태 반영
       calibDoc = {
         ...calibDoc,
         applied: true,
@@ -281,7 +277,6 @@ async function handleIncomingAngleNodeData(payload) {
 
       logger(`Calibration 확정(door ${doorNum}) → offsetX=${avgX}, offsetY=${avgY}`)
     } else {
-      // 아직 목표 미달 → 누적만 저장
       await AngleCalibration.updateOne(
         { doorNum },
         {
@@ -296,27 +291,25 @@ async function handleIncomingAngleNodeData(payload) {
     }
   }
 
-  // 최종 offset (적용 가능 여부 포함)
+  // 최종 offset
   const offsetX = calibDoc?.applied ? (calibDoc.offsetX ?? 0) : 0
   const offsetY = calibDoc?.applied ? (calibDoc.offsetY ?? 0) : 0
 
-  // ✅ 보정 적용 (calibrated = raw - offset)
-  let calibratedX = angle_x - offsetX
-  let calibratedY = angle_y - offsetY
-
-  // 소수점 둘째 자리 반올림
+  // 보정 적용
+  let calibratedX = Number(angle_x ?? 0) - offsetX
+  let calibratedY = Number(angle_y ?? 0) - offsetY
   calibratedX = parseFloat(calibratedX.toFixed(2))
   calibratedY = parseFloat(calibratedY.toFixed(2))
 
-  // ✅ Angle-Node: raw + 보정값 저장
+  // Angle-Node 최신값(원시+보정) 업데이트
   const updatedAngleNode = await AngleNodeSchema.findOneAndUpdate(
     { doorNum },
     {
       $set: {
-        angle_x: angle_x,          // raw
-        angle_y: angle_y,          // raw
-        calibrated_x: calibratedX, // 보정값
-        calibrated_y: calibratedY, // 보정값
+        angle_x: Number(angle_x ?? 0),   // raw
+        angle_y: Number(angle_y ?? 0),   // raw
+        calibrated_x: calibratedX,       // 보정
+        calibrated_y: calibratedY,       // 보정
         lastSeen: now,
         node_alive: true,
       },
@@ -324,20 +317,21 @@ async function handleIncomingAngleNodeData(payload) {
     { new: true, upsert: true }
   )
 
-  // ★ 스냅샷 위치 계산 (게이트웨이 zone_name → 없으면 노드 position)
-const histPosition = await resolveHistoryPosition(String(gateway_number), doorNum);
+  // ★ gw_position / node_position 계산 (여기가 핵심)
+  const gw_position = await findGatewayZoneByGwNumber(gateway_number)   // gw_number(끝4) → Gateway.zone_name
+  const node_position = await getAngleNodePositionByDoorNum(doorNum)    // AngleNode.position
 
-// AngleNodeHistory: 보정값 + 위치 스냅샷 저장
-await new AngleNodeHistory({
-  gw_number: gateway_number,
-  doorNum,
-  angle_x: calibratedX, // 보정 적용된 값
-  angle_y: calibratedY, // 보정 적용된 값
-  position: histPosition // ★ 그 시점의 위치를 고정 저장
-}).save()
+  // AngleNodeHistory: 보정값 + 위치 스냅샷 저장 (position 필드 사용 금지)
+  await new AngleNodeHistory({
+    gw_number: gateway_number,
+    doorNum,
+    angle_x: calibratedX,
+    angle_y: calibratedY,
+    gw_position,          // 게이트웨이 zone_name
+    node_position,        // 노드 position
+  }).save().catch(err => logError('AngleNodeHistory 저장 오류:', err?.message || err))
 
-
-  // ✅ 빌딩 연결된 게이트웨이일 때만, 보정값 기준으로 알림 로그 적재(yellow/red만)
+  // 알림 로직 (보정값 기준)
   const { checkAndLogAngle } = require('../services/Alert.service')
   await checkAndLogAngle({
     gateway_serial: String(gateway_number),
@@ -358,4 +352,5 @@ await new AngleNodeHistory({
   mqttEmitter.emit('mqttAngleMessage', updatedAngleNode)
 }
 
+// 내보내기
 module.exports = { mqttEmitter, mqttClient }
