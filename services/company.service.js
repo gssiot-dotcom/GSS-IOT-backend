@@ -488,6 +488,69 @@ class CompanyService {
 		}
 	}
 
+		// 게이트웨이를 다른 빌딩으로 이동시키는 서비스
+	// gatewayId: 옮길 게이트웨이 _id
+	// newBuildingId: 대상 빌딩 _id (지금 보고 있는 빌딩)
+	async moveGatewayToBuildingData(gatewayId, newBuildingId) {
+		// Building 기준으로 세션 생성 (기존 createBuildingData와 동일 패턴)
+		const session = await this.buildingSchema.startSession()
+		session.startTransaction()
+
+		try {
+			// 1) 게이트웨이 / 빌딩 존재 확인
+			const gateway = await this.gatewaySchema
+				.findById(gatewayId)
+				.session(session)
+			if (!gateway) {
+				throw new Error('Gateway not found')
+			}
+
+			const newBuilding = await this.buildingSchema
+				.findById(newBuildingId)
+				.session(session)
+			if (!newBuilding) {
+				throw new Error('Building not found')
+			}
+
+			const oldBuildingId = gateway.building_id
+
+			// 2) 기존 빌딩의 gateway_sets 에서 이 게이트웨이 제거
+			if (oldBuildingId) {
+				await this.buildingSchema.updateOne(
+					{ _id: oldBuildingId },
+					{ $pull: { gateway_sets: gateway._id } },
+					{ session }
+				)
+			}
+
+			// 3) 새 빌딩의 gateway_sets 에 이 게이트웨이 추가 (중복 방지)
+			await this.buildingSchema.updateOne(
+				{ _id: newBuildingId, gateway_sets: { $ne: gateway._id } },
+				{ $push: { gateway_sets: gateway._id } },
+				{ session }
+			)
+
+			// 4) 게이트웨이 도큐먼트의 building_id 업데이트
+			gateway.building_id = newBuildingId
+			await gateway.save({ session })
+
+			// 5) 트랜잭션 커밋
+			await session.commitTransaction()
+			session.endSession()
+
+			return {
+				gateway,
+				oldBuildingId,
+				newBuildingId,
+			}
+		} catch (error) {
+			await session.abortTransaction()
+			session.endSession()
+			throw new Error(`Error on moving gateway to building: ${error.message}`)
+		}
+	}
+
+
 	async setAlarmLevel(building_id, alarmLevel) {
 		try {
 			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
