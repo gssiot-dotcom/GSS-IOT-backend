@@ -5,6 +5,7 @@ const router = express.Router()
 // ⚠️ 경로는 프로젝트 구조에 맞춰 조정하세요.
 // 예: '../schema/Angle.node.model' 또는 '../models/Angle.node.model'
 const AngleNode = require('../schema/Angle.node.model')
+const AngleNodeService = require('../services/angleNode.service')
 
 // ✅ 공통: 정수 도어번호 파싱
 function toDoorNum(v) {
@@ -58,6 +59,52 @@ router.get('/alive', async (req, res) => {
 })
 
 /**
+ * PUT /api/angle-nodes/position
+ * body 형식:
+ *  - 단일: { "doorNum": 10, "position": "B-2구간-7층" }
+ *  - 여러 개: [ { doorNum: 10, position: "..." }, { doorNum: 11, position: "..." } ]
+ */
+router.put('/position', async (req, res) => {
+  try {
+    const body = req.body
+
+    // 배열인지 단일 객체인지에 따라 분기
+    if (Array.isArray(body)) {
+      const updated = await AngleNodeService.setAngleNodePositions(body)
+      return res.status(200).json({
+        state: 'success',
+        count: updated.length,
+        angle_nodes: updated,
+      })
+    } else {
+      const { doorNum, position } = body
+      if (doorNum === undefined || position === undefined) {
+        return res.status(400).json({
+          state: 'fail',
+          message: 'doorNum and position are required',
+        })
+      }
+
+      const updated = await AngleNodeService.setAngleNodePosition(
+        doorNum,
+        position
+      )
+
+      return res.status(200).json({
+        state: 'success',
+        angle_node: updated,
+      })
+    }
+  } catch (error) {
+    console.error('Error on setting angle-node position:', error.message)
+    return res.status(500).json({
+      state: 'fail',
+      message: error.message,
+    })
+  }
+})
+
+/**
  * GET /api/angle-nodes/:doorNum/alive
  * 단일 도어번호의 node_alive 상태 조회
  *   - 응답: { doorNum, node_alive, lastSeen, updatedAt, save_status, save_status_lastSeen }
@@ -89,5 +136,7 @@ router.get('/:doorNum/alive', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch node_alive' })
   }
 })
+
+
 
 module.exports = router
