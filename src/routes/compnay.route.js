@@ -1,6 +1,6 @@
 const express = require('express')
 const company_router = express.Router()
-const companyController = require('../controllers/company-controller')
+const companyController = require('../controllers/company.controller')
 const uploadImage = require('../middlewares/uploadImage')
 
 // ========== Building related endpoints ======= //

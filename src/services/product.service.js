@@ -111,115 +111,112 @@ class ProductService {
 	}
 
 	/**
- * 일반 게이트웨이만 생성
- * @param {Object} data - { serial_number, ... }
- */
-async createGatewayData(data) {
-  try {
-    // 기존 게이트웨이 존재 여부 체크
-    const existGateway = await this.gatewaySchema.findOne({
-      serial_number: data.serial_number,
-    })
-    if (existGateway) {
-      throw new Error(
-        `일련 번호가 ${existGateway.serial_number}인 기존 게이트웨이가 있습니다. `
-      )
-    }
+	 * 일반 게이트웨이만 생성
+	 * @param {Object} data - { serial_number, ... }
+	 */
+	async createGatewayData(data) {
+		try {
+			// 기존 게이트웨이 존재 여부 체크
+			const existGateway = await this.gatewaySchema.findOne({
+				serial_number: data.serial_number,
+			})
+			if (existGateway) {
+				throw new Error(
+					`일련 번호가 ${existGateway.serial_number}인 기존 게이트웨이가 있습니다. `
+				)
+			}
 
-    // ⭐ 노드/AngleNode/MQTT 아무 것도 안 건드리고, 게이트웨이만 생성
-    const gateway = await this.gatewaySchema.create(data)
-    return gateway
-  } catch (error) {
-    throw new Error(`Error on creating-gateway: ${error.message}`)
-  }
-}
+			// ⭐ 노드/AngleNode/MQTT 아무 것도 안 건드리고, 게이트웨이만 생성
+			const gateway = await this.gatewaySchema.create(data)
+			return gateway
+		} catch (error) {
+			throw new Error(`Error on creating-gateway: ${error.message}`)
+		}
+	}
 
-/**
- * 기존 게이트웨이에 일반 노드(Node)들을 연결 + MQTT로 노드 리스트 publish
- * @param {Object} data - { gateway_id, nodes:[ObjectId,...] }
- */
-async combineNodesToGatewayData(data) {
-  try {
-    const { gateway_id, nodes: nodesId } = data
+	/**
+	 * 기존 게이트웨이에 일반 노드(Node)들을 연결 + MQTT로 노드 리스트 publish
+	 * @param {Object} data - { gateway_id, nodes:[ObjectId,...] }
+	 */
+	async combineNodesToGatewayData(data) {
+		try {
+			const { gateway_id, nodes: nodesId } = data
 
-    // 1) 게이트웨이 존재 여부 확인
-    const gateway = await this.gatewaySchema.findById(gateway_id)
-    if (!gateway) {
-      throw new Error('Gateway not found, 먼저 게이트웨이를 생성하세요.')
-    }
+			// 1) 게이트웨이 존재 여부 확인
+			const gateway = await this.gatewaySchema.findById(gateway_id)
+			if (!gateway) {
+				throw new Error('Gateway not found, 먼저 게이트웨이를 생성하세요.')
+			}
 
-    // 2) 연결할 Node 들의 doorNum 조회
-    const nodes = await this.nodeSchema.find(
-      { _id: { $in: nodesId } },
-      { doorNum: 1, _id: 0 }
-    )
+			// 2) 연결할 Node 들의 doorNum 조회
+			const nodes = await this.nodeSchema.find(
+				{ _id: { $in: nodesId } },
+				{ doorNum: 1, _id: 0 }
+			)
 
-    if (!nodes || nodes.length === 0) {
-      throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
-    }
+			if (!nodes || nodes.length === 0) {
+				throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
+			}
 
-    // 3) MQTT publish 준비
-    const gw_number = gateway.serial_number
-    const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
+			// 3) MQTT publish 준비
+			const gw_number = gateway.serial_number
+			const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
 
-    const publishData = {
-      cmd: 2,              // 노드 리스트 설정
-      nodeType: 0,         // 0: 일반 Node
-      numNodes: nodes.length,
-      nodes: nodes.map(node => node.doorNum),
-    }
+			const publishData = {
+				cmd: 2, // 노드 리스트 설정
+				nodeType: 0, // 0: 일반 Node
+				numNodes: nodes.length,
+				nodes: nodes.map(node => node.doorNum),
+			}
 
-    // 4) MQTT 서버로 publish + 응답 대기
-    if (mqttClient.connected) {
-      const publishPromise = new Promise((resolve, reject) => {
-        mqttClient.publish(topic, JSON.stringify(publishData), err => {
-          if (err) {
-            reject(new Error(`MQTT publishing failed for topic: ${topic}`))
-          } else {
-            resolve(true)
-          }
-        })
-      })
-      await publishPromise
+			// 4) MQTT 서버로 publish + 응답 대기
+			if (mqttClient.connected) {
+				const publishPromise = new Promise((resolve, reject) => {
+					mqttClient.publish(topic, JSON.stringify(publishData), err => {
+						if (err) {
+							reject(new Error(`MQTT publishing failed for topic: ${topic}`))
+						} else {
+							resolve(true)
+						}
+					})
+				})
+				await publishPromise
 
-      const mqttResponsePromise = new Promise((resolve, reject) => {
-        mqttEmitter.once('gwPubRes', data => {
-          if (data.resp === 'success') {
-            resolve(true)
-          } else {
-            reject(new Error('Failed publishing gateway nodes to mqtt'))
-          }
-        })
+				const mqttResponsePromise = new Promise((resolve, reject) => {
+					mqttEmitter.once('gwPubRes', data => {
+						if (data.resp === 'success') {
+							resolve(true)
+						} else {
+							reject(new Error('Failed publishing gateway nodes to mqtt'))
+						}
+					})
 
-        // 10초 타임아웃
-        setTimeout(() => {
-          reject(new Error('MQTT response timeout'))
-        }, 10000)
-      })
+					// 10초 타임아웃
+					setTimeout(() => {
+						reject(new Error('MQTT response timeout'))
+					}, 10000)
+				})
 
-      await mqttResponsePromise
-    } else {
-      throw new Error('MQTT client is not connected')
-    }
+				await mqttResponsePromise
+			} else {
+				throw new Error('MQTT client is not connected')
+			}
 
-    // 5) MQTT 설정 성공 시 Node 들을 게이트웨이에 귀속 + 비활성화
-    await this.nodeSchema.updateMany(
-      { _id: { $in: nodesId } },
-      { $set: { node_status: false, gateway_id: gateway._id } }
-    )
+			// 5) MQTT 설정 성공 시 Node 들을 게이트웨이에 귀속 + 비활성화
+			await this.nodeSchema.updateMany(
+				{ _id: { $in: nodesId } },
+				{ $set: { node_status: false, gateway_id: gateway._id } }
+			)
 
-    // 6) 게이트웨이의 nodes 필드 갱신
-    gateway.nodes = nodesId
-    const updatedGateway = await gateway.save()
+			// 6) 게이트웨이의 nodes 필드 갱신
+			gateway.nodes = nodesId
+			const updatedGateway = await gateway.save()
 
-    return updatedGateway
-  } catch (error) {
-    throw new Error(
-      `Error on combining-nodes-to-gateway: ${error.message}`
-    )
-  }
-}
-
+			return updatedGateway
+		} catch (error) {
+			throw new Error(`Error on combining-nodes-to-gateway: ${error.message}`)
+		}
+	}
 
 	/**
 	 * 사무실 게이트웨이 깨우기 / 알람 설정 MQTT 전송
@@ -236,7 +233,7 @@ async combineNodesToGatewayData(data) {
 			let topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
 
 			const publishData = {
-				cmd: 3,        // 3: wake-up / 알람 설정 명령
+				cmd: 3, // 3: wake-up / 알람 설정 명령
 				alarmActive,
 				alertLevel: alertLevel,
 			}
@@ -296,7 +293,7 @@ async combineNodesToGatewayData(data) {
 				numNodes: nodes.length,
 				nodes: nodes.map(node => node.doorNum),
 			}
-			console.log('Publish-data:', publishData, topic)
+			logger('Publish-data:', publishData, topic)
 
 			// MQTT 연결 확인 및 publish + 응답 대기
 			if (mqttClient.connected) {

@@ -1,6 +1,6 @@
 const express = require('express')
 const product_router = express.Router()
-const productController = require('../controllers/product-controller')
+const productController = require('../controllers/product.controller')
 const uploadImage = require('../middlewares/uploadImage')
 
 // =============================== Product creating & geting endpoints ================================== //

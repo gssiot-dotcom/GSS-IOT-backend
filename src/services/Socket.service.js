@@ -1,3 +1,4 @@
+const { logger } = require('../lib/logger')
 const GatewaySchema = require('../schema/Gateway.model')
 const { mqttEmitter } = require('./Mqtt.service')
 
@@ -33,9 +34,9 @@ const setupSocket = serverIo => {
 	})
 
 	io.on('connection', socket => {
-		console.log(`New SOCKET user connected: ${socket.id}`)
+		logger(`New SOCKET user connected: ${socket.id}`)
 		socket.on('disconnect', () => {
-			console.log(`SOCKET user disconnected: ${socket.id}`)
+			logger(`SOCKET user disconnected: ${socket.id}`)
 		})
 	})
 }

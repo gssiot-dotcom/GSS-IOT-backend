@@ -5,7 +5,6 @@
 
 const ProductService = require('../services/product.service')
 const path = require('path')
-const fs = require('fs')
 const AngleNodeHistory = require('../schema/Angle.node.history.model')
 const { logger, logError } = require('../lib/logger')
 
@@ -692,19 +691,19 @@ productController.uploadAngleNodeImage = async (req, res) => {
  * - 내부에서 MQTT publish 까지 수행됩니다.
  */
 productController.combineNodesToGateway = async (req, res) => {
-  try {
-    logger('request: combineNodesToGateway:')
-    const data = req.body
-    const productService = new ProductService()
+	try {
+		logger('request: combineNodesToGateway:')
+		const data = req.body
+		const productService = new ProductService()
 
-    await productService.combineNodesToGatewayData(data)
+		await productService.combineNodesToGatewayData(data)
 
-    res.json({
-      state: 'succcess',
-      message: '노드가 게이트웨이에 할당되었습니다',
-    })
-  } catch (error) {
-    logError(error.message)
-    res.json({ state: 'fail', message: error.message })
-  }
+		res.json({
+			state: 'succcess',
+			message: '노드가 게이트웨이에 할당되었습니다',
+		})
+	} catch (error) {
+		logError(error.message)
+		res.json({ state: 'fail', message: error.message })
+	}
 }
