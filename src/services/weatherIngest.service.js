@@ -3,8 +3,8 @@
 // 저장/실패/스킵 모두 콘솔 로그 출력
 
 const axios = require('axios')
-const Building = require('../schema/Building.model')
-const Weather = require('../schema/Weather.model')
+const Building = require('../modules/gateways/gateway.model')
+const Weather = require('../modules/weather/weather.model')
 const { geocodeAddress } = require('./geocode.service') // services/geocode.service.js
 const { degToCompass } = require('../utils/wind') // utils/wind.js
 

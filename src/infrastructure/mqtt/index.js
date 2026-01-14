@@ -4,10 +4,10 @@ const { logError, logger } = require('../../lib/logger')
 
 const {
 	handleNodeMqttMessage,
-} = require('../../modules/nodes/nodeMqtt.service')
+} = require('../../modules/nodes/door-node/node.mqtt.service')
 const {
 	handleAngleMqttMessage,
-} = require('../../modules/nodes/angleNodeMqtt.service')
+} = require('../../modules/nodes/angle-node/angleNode.mqtt.service')
 
 // export qilish kerak bo‘lsa:
 let mqttClient

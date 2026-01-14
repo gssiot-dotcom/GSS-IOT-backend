@@ -1,0 +1,25 @@
+const router = require('express').Router()
+
+const user_router = require('../modules/users/User.route')
+const node_router = require('../modules/nodes/door-node/nodes.routes')
+const angle_node_router = require('../modules/nodes/angle-node/angelNode.route')
+const vertical_node_router = require('../modules/nodes/vertical-node/vertical.node.route')
+const gateway_router = require('../modules/gateways/gateway.route')
+const building_router = require('../modules/building/building.route')
+const company_router = require('../modules/company/company.route')
+const weather_router = require('../modules/weather/weather.routes')
+const report_router = require('../modules/reports/report.route')
+const alert_router = require('../modules/alertion/alert.route')
+
+router.use('/auth', user_router)
+router.use('/node', node_router)
+router.use('/angel-node', angle_node_router)
+router.use('/vertical-node', vertical_node_router)
+router.use('/gateway', gateway_router)
+router.use('/building', building_router)
+router.use('/company', company_router)
+router.use('/weather', weather_router)
+router.use('/report', report_router)
+router.use('/alert', alert_router)
+
+module.exports = router

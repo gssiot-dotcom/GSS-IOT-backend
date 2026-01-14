@@ -1,6 +1,6 @@
 // services/Heartbeat.service.js
-const GatewaySchema = require('../schema/Gateway.model')
-const AngleNodeSchema = require('../schema/Angle.node.model')
+const GatewaySchema = require('../modules/gateways/gateway.model')
+const { AngleNode } = require('../modules/nodes/angle-node/angleNode.model')
 
 function startHeartbeatJob({
 	intervalMs = 5 * 60 * 1000,
@@ -26,13 +26,13 @@ function startHeartbeatJob({
 		)
 
 		// Node lar uchun ham xuddi shu
-		await AngleNodeSchema.updateMany(
+		await AngleNode.updateMany(
 			{
 				$or: [{ lastSeen: { $exists: false } }, { lastSeen: { $lt: cutoff } }],
 			},
 			{ $set: { node_alive: false } }
 		)
-		await AngleNodeSchema.updateMany(
+		await AngleNode.updateMany(
 			{ lastSeen: { $gte: cutoff } },
 			{ $set: { node_alive: true } }
 		)

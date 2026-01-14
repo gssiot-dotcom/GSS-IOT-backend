@@ -6,7 +6,7 @@ const mongoose = require('mongoose')
 const cron = require('node-cron')
 const { Server } = require('socket.io')
 
-const { app, allowedOrigins } = require('./app')
+const { app, allowedOrigins } = require('./index')
 
 const { initMqtt } = require('./infrastructure/mqtt')
 const { initSocket } = require('./infrastructure/socket')
@@ -26,6 +26,8 @@ const io = new Server(server, {
 		credentials: true,
 	},
 })
+
+// === SocketIO & MQTT connection === //
 
 initSocket(io)
 initMqtt()

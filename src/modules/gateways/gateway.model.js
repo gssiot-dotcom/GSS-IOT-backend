@@ -1,5 +1,5 @@
 const mongoose = require('mongoose')
-const { gateway_type_enums } = require('../lib/config')
+const { gateway_type_enums } = require('../../lib/config')
 
 const gatewaySchema = new mongoose.Schema({
 	serial_number: {

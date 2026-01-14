@@ -38,5 +38,22 @@ const userSchema = new Schema({
 	},
 })
 
+const otpSchema = new Schema({
+	user_email: {
+		type: String,
+		required: true,
+	},
+	otp: {
+		type: Number,
+		required: true,
+	},
+	expiresAt: {
+		type: Date,
+		required: true,
+	},
+})
+
+const Otp = model('Otp', otpSchema)
+
 const User = model('User', userSchema)
-module.exports = User
+module.exports = { User, Otp }

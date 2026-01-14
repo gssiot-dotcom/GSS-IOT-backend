@@ -1,7 +1,5 @@
 const CompanyService = require('../services/company.service')
 const { logger, logError } = require('../lib/logger')
-const uploadImage = require('../middlewares/uploadImage')
-const multer = require('multer')
 
 let companyController = module.exports
 
@@ -30,7 +28,10 @@ companyController.changeGatewayBuilding = async (req, res) => {
 		if (!gateway_id || !building_id) {
 			return res
 				.status(400)
-				.json({ state: 'fail', message: 'gateway_id와 building_id가 필요합니다.' })
+				.json({
+					state: 'fail',
+					message: 'gateway_id와 building_id가 필요합니다.',
+				})
 		}
 
 		const companyService = new CompanyService()
@@ -46,12 +47,9 @@ companyController.changeGatewayBuilding = async (req, res) => {
 		})
 	} catch (error) {
 		logError(error.message)
-		return res
-			.status(500)
-			.json({ state: 'fail', message: error.message })
+		return res.status(500).json({ state: 'fail', message: error.message })
 	}
 }
-
 
 companyController.getActiveBuildings = async (req, res) => {
 	try {

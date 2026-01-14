@@ -1,5 +1,5 @@
 const { eventBus } = require('../../shared/eventBus')
-const GatewaySchema = require('../../schema/Gateway.model')
+const GatewaySchema = require('../../modules/gateways/gateway.model')
 
 let io
 
