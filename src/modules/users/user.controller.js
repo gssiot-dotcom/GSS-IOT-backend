@@ -1,7 +1,7 @@
 const assert = require('assert')
 const UserService = require('./user.service')
 const jwt = require('jsonwebtoken')
-const UserSchema = require('./User.model')
+const { User, Otp } = require('./User.model')
 const { logger, logError } = require('../../lib/logger')
 
 let userController = module.exports
@@ -68,7 +68,7 @@ userController.checkUser = async (req, res) => {
 
 		const isVerified = jwt.verify(token, process.env.JWT_SECRET_KEY)
 
-		const user = await UserSchema.findById(isVerified._id)
+		const user = await User.findById(isVerified._id)
 		if (!user) {
 			res.clearCookie('access_token')
 			return res.json({ state: 'fail', user: 'Not found' })
