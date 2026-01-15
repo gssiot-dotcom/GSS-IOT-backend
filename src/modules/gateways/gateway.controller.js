@@ -14,11 +14,20 @@ gatewayController.createGateway = async (req, res) => {
 	try {
 		logger('request: createGateway:')
 		const data = req.body
+		if (!data.serial_number || !data.gateway_type) {
+			return res.status(400).json({
+				state: 'fail',
+				message: 'Gateway number and gateway-type is required',
+			})
+		}
 
 		// 게이트웨이 생성 (중복 serial_number 체크, MQTT 설정 포함)
 		await GatewayService.createGatewayData(data)
 
-		res.json({ state: 'succcess', message: '게이트웨이가 생성돼었읍니다' })
+		return res.json({
+			state: 'succcess',
+			message: '게이트웨이가 생성돼었읍니다',
+		})
 	} catch (error) {
 		logError(error.message)
 		res.json({ state: 'fail', message: error.message })
@@ -92,6 +101,20 @@ gatewayController.getGateways = async (req, res) => {
 		const gateways = await GatewayService.getGatewaysData()
 
 		res.json({ state: 'succcess', gateways: gateways })
+	} catch (error) {
+		logError(error.message)
+		res.json({ state: 'Fail', message: error.message })
+	}
+}
+
+gatewayController.gatewaysByType = async (req, res) => {
+	try {
+		logger('request: gatewaysByType')
+
+		// 전체 게이트웨이 조회
+		const gateways = await GatewayService.getGatewaysByType()
+
+		res.json({ state: 'succcess', gateways })
 	} catch (error) {
 		logError(error.message)
 		res.json({ state: 'Fail', message: error.message })

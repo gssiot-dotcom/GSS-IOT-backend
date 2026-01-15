@@ -73,22 +73,28 @@ const startServer = async () => {
 startServer()
 
 // Graceful shutdown
-const graceful = signal => {
+const graceful = async signal => {
 	console.log(`[${signal}] shutting down...`)
+
 	try {
 		if (heartbeat?.stop) heartbeat.stop()
 	} catch {}
-
 	try {
 		if (weatherCronTask?.stop) weatherCronTask.stop()
 	} catch {}
 
-	server.close(() => {
-		mongoose.connection.close(false, () => {
-			console.log('[MongoDB] connection closed')
-			process.exit(0)
-		})
-	})
+	// 1) HTTP serverni yopish
+	await new Promise(resolve => server.close(resolve))
+
+	// 2) Mongo connectionni yopish (callback yo‘q!)
+	try {
+		await mongoose.connection.close()
+		console.log('[MongoDB] connection closed')
+	} catch (err) {
+		console.error('[MongoDB] close error:', err)
+	} finally {
+		process.exit(0)
+	}
 }
 
 process.on('SIGINT', () => graceful('SIGINT'))

@@ -83,7 +83,7 @@ angleNodeController.combineAngleNodeToGateway = async (req, res) => {
 		// 게이트웨이와 Angle-Node 를 연결하는 비즈니스 로직
 		await GatewayServie.combineAngleNodeToGatewayData(data)
 
-		res.json({
+		return res.json({
 			state: 'succcess',
 			message: '비계전도 노드가 게이트웨이에 할당되었습니다',
 		})

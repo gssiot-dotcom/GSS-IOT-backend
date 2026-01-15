@@ -9,6 +9,7 @@ gateway_router.get(
 	gatewayController.makeWakeUpOfficeGateway
 )
 gateway_router.get('/get-gateways', gatewayController.getGateways)
+gateway_router.get('/get-gateways-bytype', gatewayController.gatewaysByType)
 gateway_router.get('/get-active-gateways', gatewayController.getActiveGateways)
 gateway_router.get(
 	'/get-single-gateway/:number',

@@ -32,6 +32,16 @@ const gatewaySchema = new mongoose.Schema({
 		required: false,
 		default: [],
 	},
+	vertical_nodes: {
+		type: [
+			{
+				type: mongoose.Schema.ObjectId,
+				ref: 'Vertical-Node',
+			},
+		],
+		required: false,
+		default: [],
+	},
 	gateway_status: {
 		type: Boolean,
 		required: false,
@@ -40,7 +50,7 @@ const gatewaySchema = new mongoose.Schema({
 	gateway_type: {
 		type: String,
 		required: [true, 'Gateway type is required'],
-		default: 'NODE_GATEWAY',
+		default: 'GATEWAY',
 		enum: {
 			values: gateway_type_enums,
 			message: '{VALUE} is not among permitted gateway types',

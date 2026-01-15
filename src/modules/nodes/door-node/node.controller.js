@@ -1,4 +1,4 @@
-const { logger } = require('../../../lib/logger')
+const { logger, logError } = require('../../../lib/logger')
 const NodeService = require('./node.mqtt.service')
 const GatewayServie = require('../../gateways/gateway.service')
 
@@ -46,12 +46,12 @@ doorNodeController.getNodes = async (req, res) => {
 	}
 }
 
-doorNodeController.getActiveNodes = async (req, res) => {
+doorNodeController.getAllTypeActiveNodes = async (req, res) => {
 	try {
 		logger('request: getNodes')
 
 		// 활성 노드 조회
-		const nodes = await NodeService.getActiveNodesData()
+		const nodes = await NodeService.getAllTypeActiveNodesData()
 
 		res.json({ state: 'succcess', nodes: nodes })
 	} catch (error) {

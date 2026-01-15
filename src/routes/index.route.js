@@ -13,7 +13,7 @@ const alert_router = require('../modules/alertion/alert.route')
 
 router.use('/auth', user_router)
 router.use('/node', node_router)
-router.use('/angel-node', angle_node_router)
+router.use('/angle-node', angle_node_router)
 router.use('/vertical-node', vertical_node_router)
 router.use('/gateway', gateway_router)
 router.use('/building', building_router)

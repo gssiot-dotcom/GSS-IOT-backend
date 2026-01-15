@@ -4,6 +4,8 @@ const GatewaySchema = require('../../gateways/gateway.model')
 const { eventBus } = require('../../../shared/eventBus')
 const { logger, logError, logInfo } = require('../../../lib/logger')
 const fileService = require('../../../services/file.service')
+const { AngleNode } = require('../angle-node/angleNode.model')
+const { VerticalNode } = require('../vertical-node/Vertical.node.model')
 
 async function handleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	const now = new Date()
@@ -101,13 +103,20 @@ async function getNodesData() {
  * node_status = true 인 활성 Node 들만 조회
  * - 없으면 빈 배열 반환
  */
-async function getActiveNodesData() {
+async function getAllTypeActiveNodesData() {
 	try {
-		const nodes = await Node.find({ node_status: true })
-		if (!nodes || nodes.length == 0) {
+		const door_nodes = await Node.find({ node_status: true })
+		const angle_nodes = await AngleNode.find({ node_status: true })
+		const vertical_nodes = await VerticalNode.find({ node_status: true })
+		if (!door_nodes || !angle_nodes.length || !vertical_nodes) {
 			return []
 		}
-		return nodes
+		const result = {
+			nodes: door_nodes,
+			angle_nodes,
+			vertical_nodes,
+		}
+		return result
 	} catch (error) {
 		throw error
 	}
@@ -310,7 +319,7 @@ async function setNodesPositionData(nodesPosition, buildingId, file) {
 module.exports = {
 	createNodesData,
 	getNodesData,
-	getActiveNodesData,
+	getAllTypeActiveNodesData,
 	downloadNodeHistoryData,
 	updateNodeStatusData,
 	deleteNodeData,

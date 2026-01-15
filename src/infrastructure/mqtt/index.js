@@ -28,6 +28,7 @@ function initMqtt() {
 		try {
 			const data = JSON.parse(buf.toString())
 			const gatewayNumberLast4 = topic.split('/').pop().slice(-4)
+			logger('MQTT incoming data:', data)
 
 			// routing:
 			if (topic.startsWith(topics.nodePrefix)) {
@@ -44,7 +45,10 @@ function initMqtt() {
 				// xohlasangiz keyin alohida module qilasiz
 				// hozircha eventBusga emit qilsa ham bo‘ladi
 				const { eventBus } = require('../../shared/eventBus')
-				eventBus.emit('gateway.response', { gatewayNumberLast4, data })
+				eventBus.emit('gateway.response', {
+					gw_number: gatewayNumberLast4,
+					data,
+				})
 				return
 			}
 		} catch (err) {

@@ -21,7 +21,7 @@ angleNodeRouter.put(
 	angleNodeController.uploadAngleNodeImage
 )
 angleNodeRouter.post(
-	'/combine-angle-nodes',
+	'/combine/to-gateway',
 	angleNodeController.combineAngleNodeToGateway
 )
 angleNodeRouter.put(

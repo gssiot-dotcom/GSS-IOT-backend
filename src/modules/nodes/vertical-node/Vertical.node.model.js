@@ -20,7 +20,7 @@ const VerticalSchema = new Schema(
 // agar yuqorida index: true yozmasang
 VerticalSchema.index({ gateway_id: 1 })
 
-const VerticalNode = mongoose.model('VerticalNode', VerticalSchema)
+const VerticalNode = mongoose.model('Vertical-Node', VerticalSchema)
 
 // =========== VerticalNode-History Model =========== //
 const VerticalNodeHistorySchema = new Schema(

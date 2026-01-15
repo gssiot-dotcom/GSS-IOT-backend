@@ -93,7 +93,7 @@ const angleCalibrationSchema = new mongoose.Schema(
 
 // ============ Exports of schemas ============ //
 
-const AngleNode = mongoose.model('AngleNode', angleNodeSchema)
+const AngleNode = mongoose.model('Angle-Node', angleNodeSchema)
 const AngleNodeHistory = mongoose.model(
 	'AngleNodeHistory',
 	AngleNodeHistorySchema
