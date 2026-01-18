@@ -11,7 +11,7 @@ class VerticalNodeService {
 		this.verticalNodeHistorySchema = VerticalNodeHistory
 	}
 
-	// =============================== Product creating & getting logics ================================== //
+	// ==================== Product creating & getting logics ===================== //
 
 	/**
 	 * 비계전도(VerticalNode) 여러 개를 생성하는 서비스
@@ -22,13 +22,13 @@ class VerticalNodeService {
 	async createVerticalNodesData(arrayData) {
 		try {
 			// 이미 존재하는 node_number 이 있는지 확인
-			const existNodes = await VerticalNodeS.find({
+			const existNodes = await this.verticalNodeSchema.find({
 				node_number: { $in: arrayData.map(obj => obj.node_number) },
 			})
 			if (existNodes.length > 0) {
 				const existNodeNums = existNodes.map(node => node.node_number)
 				throw new Error(
-					`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`
+					`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`,
 				)
 			}
 
@@ -39,7 +39,7 @@ class VerticalNodeService {
 					angle_x,
 					angle_y,
 					gateway_id,
-				})
+				}),
 			)
 
 			const result = await this.verticalNodeSchema.insertMany(arrayObject)
@@ -71,9 +71,8 @@ class VerticalNodeService {
 
 	async deleteVerticalNodeById(verticalNodeId) {
 		try {
-			const result = await this.verticalNodeSchema.findByIdAndDelete(
-				verticalNodeId
-			)
+			const result =
+				await this.verticalNodeSchema.findByIdAndDelete(verticalNodeId)
 			return result
 		} catch (error) {
 			throw new Error(`Error: ${error.message}`)
@@ -85,7 +84,7 @@ class VerticalNodeService {
 			const result = await this.verticalNodeSchema.findByIdAndUpdate(
 				verticalNodeId,
 				[{ $set: { node_status: { $not: '$node_status' } } }],
-				{ new: true }
+				{ new: true },
 			)
 			return result
 		} catch (error) {

@@ -1,6 +1,6 @@
 const GatewaySchema = require('../gateways/gateway.model')
 const BuildingSchema = require('../building/building.model')
-const NodeSchema = require('../nodes/door-node/node.model')
+const { Node } = require('../nodes/door-node/node.model')
 const {
 	AngleNode,
 	AngleNodeHistory,
@@ -13,7 +13,7 @@ class BuildingService {
 	constructor() {
 		this.gatewaySchema = GatewaySchema
 		this.buildingSchema = BuildingSchema
-		this.nodeSchema = NodeSchema
+		this.nodeSchema = Node
 		this.angleNodeSchema = AngleNode
 		this.angleNodesHistory = AngleNodeHistory
 	}
@@ -37,7 +37,7 @@ class BuildingService {
 				throw new Error(
 					`${existBuilding.building_name.toUpperCase()}건설에는 이미 같은 ${
 						existBuilding.building_num
-					}호 건물이 있습니다. 다른 번호를 입력해 주세요.`
+					}호 건물이 있습니다. 다른 번호를 입력해 주세요.`,
 				)
 			}
 
@@ -54,7 +54,7 @@ class BuildingService {
 				await this.gatewaySchema.updateMany(
 					{ _id: { $in: data.gateway_sets } },
 					{ $set: { gateway_status: false, building_id: building._id } },
-					{ session }
+					{ session },
 				)
 
 				await session.commitTransaction()
@@ -66,7 +66,7 @@ class BuildingService {
 				await session.abortTransaction()
 				session.endSession()
 				throw new Error(
-					`Error on updating gateways or saving building: ${innerError.message}`
+					`Error on updating gateways or saving building: ${innerError.message}`,
 				)
 			}
 		} catch (error) {
@@ -246,7 +246,7 @@ class BuildingService {
 			// 3. Barcha buildinglarning statusini true ga o'zgartirish
 			await this.gatewaySchema.updateMany(
 				{ _id: { $in: gatewayIds } }, // buildingId lar bo‘yicha qidirish
-				{ $set: { gateway_status: true } } // building_status ni true qilish
+				{ $set: { gateway_status: true } }, // building_status ni true qilish
 			)
 
 			// 4. Clientni o‘chirish
@@ -289,12 +289,12 @@ class BuildingService {
 					// Fayl topilmasa (ENOENT) — e’tiborsiz, boshqa xatolarni log qilamiz
 					if (error.code !== 'ENOENT') {
 						logError(
-							`Failed to delete old image ${oldFilePath}: ${error.message}`
+							`Failed to delete old image ${oldFilePath}: ${error.message}`,
 						)
 						// agar majburiy o‘chirish bo‘lsa, shu yerda throw qilsangiz ham bo‘ladi
 					} else {
 						logError(
-							`Failed to delete old image ${oldFilePath}: ${error.message}`
+							`Failed to delete old image ${oldFilePath}: ${error.message}`,
 						)
 					}
 				}
@@ -302,7 +302,7 @@ class BuildingService {
 			const building = await this.buildingSchema.findByIdAndUpdate(
 				building_id,
 				{ $set: { building_plan_img: imageUrl } },
-				{ new: true } // yangilangan hujjat qaytadi
+				{ new: true }, // yangilangan hujjat qaytadi
 			)
 			if (!building) throw new Error('There is no any building with this _id')
 			return building
@@ -343,7 +343,7 @@ class BuildingService {
 				await this.buildingSchema.updateOne(
 					{ _id: oldBuildingId },
 					{ $pull: { gateway_sets: gateway._id } },
-					{ session }
+					{ session },
 				)
 			}
 
@@ -351,7 +351,7 @@ class BuildingService {
 			await this.buildingSchema.updateOne(
 				{ _id: newBuildingId, gateway_sets: { $ne: gateway._id } },
 				{ $push: { gateway_sets: gateway._id } },
-				{ session }
+				{ session },
 			)
 
 			// 4) 게이트웨이 도큐먼트의 building_id 업데이트
@@ -384,7 +384,7 @@ class BuildingService {
 			const building = await this.buildingSchema.findByIdAndUpdate(
 				building_id,
 				{ $set: { alarm_level: alarmLevel } },
-				{ new: true } // yangilangan hujjat qaytadi
+				{ new: true }, // yangilangan hujjat qaytadi
 			)
 			if (!building) throw new Error('There is no any building with this _id')
 			return building

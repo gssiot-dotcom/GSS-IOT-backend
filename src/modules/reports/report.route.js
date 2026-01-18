@@ -4,7 +4,7 @@ const { nodesCsvHandler } = require('./reportNodesCSV.service')
 const reportController = require('./report.controller')
 
 reportRouter.get('/buildings/:buildingId/nodes.csv', nodesCsvHandler)
-reportRouter.get('/api/reports/daily-hwpx', reportController.getReportDailyHWP)
+reportRouter.get('/daily-hwpx', reportController.getReportDailyHWP)
 /**
  * GET /api/reports/table1
  *   ?start=YYYY-MM-DD

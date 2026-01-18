@@ -107,9 +107,8 @@ angleNodeController.updateProductStatus = async (req, res) => {
 
 		if (product_type === 'ANGLE_NODE') {
 			// 노드 활성/비활성 상태 토글
-			const result = await AngleNodeService.updateAngleNodeStatusData(
-				product_id
-			)
+			const result =
+				await AngleNodeService.updateAngleNodeStatusData(product_id)
 			return res.json({
 				state: 'success',
 				updated_node: result,
@@ -220,7 +219,7 @@ angleNodeController.uploadAngleNodeImage = async (req, res) => {
 		const result = await AngleNodeService.uploadAngleNodeImageData(
 			nodeId,
 			node_position,
-			imageUrl
+			imageUrl,
 		)
 
 		return res.status(200).json({
@@ -255,7 +254,7 @@ angleNodeController.angleNodeGraphicData = async (req, res) => {
 		}
 
 		// AngleNodeHistory 에서 doorNum + 기간 조건으로 조회
-		const data = await AngleNodeHistorySchema.find({
+		const data = await AngleNodeHistory.find({
 			doorNum: parseInt(doorNum),
 			createdAt: {
 				$gte: new Date(from),
@@ -405,7 +404,7 @@ angleNodeController.angleNodeCalibrationCancelAll = async (req, res) => {
 
 		const result = await AngleNodeCalibration.updateMany(
 			{ doorNum: { $in: doors } },
-			{ $set: set }
+			{ $set: set },
 		)
 
 		return res.json({
@@ -483,7 +482,7 @@ angleNodeController.angleNodeSaveStatusChange = async (req, res) => {
 		const updated = await AngleNode.findOneAndUpdate(
 			{ doorNum },
 			{ $set: { save_status, save_status_lastSeen: now } },
-			{ new: true }
+			{ new: true },
 		)
 
 		return res.json({
@@ -560,7 +559,7 @@ angleNodeController.getAliveAngleNodes = async (req, res) => {
 
 		const rows = await AngleNode.find(q)
 			.select(
-				'doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen'
+				'doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen',
 			)
 			.sort({ doorNum: 1 })
 			.lean()
@@ -601,7 +600,7 @@ angleNodeController.changeAngleNodesPosition = async (req, res) => {
 
 			const updated = await AngleNodeService.setAngleNodePosition(
 				doorNum,
-				position
+				position,
 			)
 
 			return res.status(200).json({
@@ -627,7 +626,7 @@ angleNodeController.getAngleNodeAliveByDoorNum = async (req, res) => {
 
 		const doc = await AngleNode.findOne({ doorNum })
 			.select(
-				'doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen'
+				'doorNum node_alive lastSeen updatedAt save_status save_status_lastSeen',
 			)
 			.lean()
 
@@ -690,7 +689,7 @@ angleNodeController.updateAngleNodeGateway = async (req, res) => {
 		const updated = await AngleNode.findOneAndUpdate(
 			{ doorNum },
 			{ gateway_id },
-			{ new: true }
+			{ new: true },
 		)
 			.select('doorNum gateway_id node_status node_alive lastSeen updatedAt')
 			.lean()

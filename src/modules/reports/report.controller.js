@@ -1,3 +1,4 @@
+const path = require('path')
 const Building = require('../building/building.model')
 const { buildDailyHwpxBuffer } = require('./reportDailyCombined.service')
 const {
@@ -39,7 +40,7 @@ reportController.getReportDailyHWP = async (req, res) => {
 		res.setHeader('Content-Type', 'application/zip')
 		res.setHeader(
 			'Content-Disposition',
-			`attachment; filename="${encodeURI(filename)}"`
+			`attachment; filename="${encodeURI(filename)}"`,
 		)
 		return res.send(buf)
 	} catch (e) {
@@ -120,10 +121,10 @@ function parseRange(q) {
 	const endRaw = hasEnd
 		? q.end
 		: hasDate && !hasStart
-		? q.date
-		: hasStart
-		? q.start
-		: null
+			? q.date
+			: hasStart
+				? q.start
+				: null
 	let startStr = startRaw,
 		endStr = endRaw
 	if (!startStr && !endStr) {

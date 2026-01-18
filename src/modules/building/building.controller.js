@@ -1,3 +1,4 @@
+const { logger } = require('../../lib/logger')
 const BuildingService = require('./building.service')
 
 let buildingController = module.exports
@@ -127,7 +128,7 @@ buildingController.uploadBuildingImage = async (req, res) => {
 		const companyService = new BuildingService()
 		const result = await companyService.uploadBuildingImageData(
 			building_id,
-			imageUrl
+			imageUrl,
 		)
 
 		return res.status(200).json({
@@ -171,18 +172,16 @@ buildingController.changeGatewayBuilding = async (req, res) => {
 		const { gateway_id, building_id } = req.body
 
 		if (!gateway_id || !building_id) {
-			return res
-				.status(400)
-				.json({
-					state: 'fail',
-					message: 'gateway_id와 building_id가 필요합니다.',
-				})
+			return res.status(400).json({
+				state: 'fail',
+				message: 'gateway_id와 building_id가 필요합니다.',
+			})
 		}
 
 		const companyService = new BuildingService()
 		const result = await companyService.moveGatewayToBuildingData(
 			gateway_id,
-			building_id
+			building_id,
 		)
 
 		return res.json({

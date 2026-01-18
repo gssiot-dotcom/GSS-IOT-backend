@@ -24,7 +24,7 @@ async function findGatewayByLast4(last4) {
 async function createAngleNodesData(arrayData) {
 	try {
 		// 이미 존재하는 doorNum 이 있는지 확인
-		const existNodes = await AngleNodeSchema.find({
+		const existNodes = await AngleNode.find({
 			doorNum: { $in: arrayData.map(obj => obj.doorNum) },
 		})
 		if (existNodes.length > 0) {
@@ -39,7 +39,7 @@ async function createAngleNodesData(arrayData) {
 			doorNum,
 		}))
 
-		const result = await AngleNodeSchema.insertMany(arrayObject)
+		const result = await AngleNode.insertMany(arrayObject)
 		return result
 	} catch (error) {
 		throw new Error(`Error: ${error.message}`)
@@ -52,7 +52,7 @@ async function createAngleNodesData(arrayData) {
  */
 async function getActiveAngleNodesData() {
 	try {
-		const angleNodes = await AngleNodeSchema.find({ node_status: true })
+		const angleNodes = await AngleNode.find({ node_status: true })
 
 		return angleNodes
 	} catch (error) {
@@ -62,7 +62,7 @@ async function getActiveAngleNodesData() {
 
 async function getAngleNodePositionByDoorNum(doorNum) {
 	try {
-		const node = await AngleNodeSchema.findOne({ doorNum: Number(doorNum) })
+		const node = await AngleNode.findOne({ doorNum: Number(doorNum) })
 			.select('position save_status')
 			.lean()
 		return node
@@ -79,7 +79,7 @@ async function getAngleNodePositionByDoorNum(doorNum) {
 async function updateAngleNodeStatusData(nodeId) {
 	try {
 		// MongoDB 4.2 부터 지원되는 파이프라인 업데이트 사용
-		const updatingNode = await AngleNodeSchema.findOneAndUpdate(
+		const updatingNode = await AngleNode.findOneAndUpdate(
 			{ _id: nodeId },
 			[{ $set: { node_status: { $not: '$node_status' } } }],
 			{ new: true } // 변경 후 도큐먼트를 반환
@@ -130,7 +130,7 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	const gateway_id = gatewayDoc?._id || null
 
 	// Node alive/lastSeen
-	await AngleNodeSchema.updateOne(
+	await AngleNode.updateOne(
 		{ doorNum },
 		{ $set: { lastSeen: now, node_alive: true } },
 		{ upsert: true }
@@ -218,7 +218,7 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	calibratedY = parseFloat(calibratedY.toFixed(2))
 
 	// Latest update
-	const updatedAngleNode = await AngleNodeSchema.findOneAndUpdate(
+	const updatedAngleNode = await AngleNode.findOneAndUpdate(
 		{ doorNum },
 		{
 			$set: {
@@ -290,7 +290,7 @@ async function setAngleNodePositionData(doorNum, position) {
 		throw new Error('position must be a non-empty string')
 	}
 
-	const node = await AngleNodeSchema.findOneAndUpdate(
+	const node = await AngleNode.findOneAndUpdate(
 		{ doorNum: n },
 		{ $set: { position } },
 		{ new: true }
@@ -323,7 +323,7 @@ async function setAngleNodePositionsData(positions) {
 			throw new Error(`Invalid position for doorNum: ${item.doorNum}`)
 		}
 
-		const node = await AngleNodeSchema.findOneAndUpdate(
+		const node = await AngleNode.findOneAndUpdate(
 			{ doorNum: n },
 			{ $set: { position: item.position } },
 			{ new: true }
@@ -343,7 +343,7 @@ async function uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
 	const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
 	try {
 		// 1) 기존 도큐먼트에서 이전 이미지 파일명 확인
-		const existing = await AngleNodeSchema.findById(nodeId)
+		const existing = await AngleNode.findById(nodeId)
 			.select('angle_node_img')
 			.lean()
 
@@ -379,7 +379,7 @@ async function uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
 		}
 
 		// 새 이미지 파일명과 position 으로 AngleNode 업데이트
-		const angleNode = await AngleNodeSchema.findByIdAndUpdate(
+		const angleNode = await AngleNode.findByIdAndUpdate(
 			nodeId,
 			{ $set: { angle_node_img: imageUrl, position: nodePosition } },
 			{ new: true }

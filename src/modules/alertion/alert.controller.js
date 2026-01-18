@@ -32,6 +32,7 @@ function parseDateRange({ start, end }) {
 }
 
 alertController.getAlertions = async (req, res) => {
+	console.log('GetAlert::')
 	try {
 		const page = Math.max(1, toNum(req.query.page, 1))
 		const limitParam = toNum(req.query.limit, 20)
@@ -98,7 +99,7 @@ alertController.getAlertions = async (req, res) => {
 			AlertLog.countDocuments(query),
 		])
 
-		res.json({
+		return res.json({
 			ok: true,
 			page,
 			limit,
@@ -115,9 +116,9 @@ alertController.getAlertions = async (req, res) => {
 alertController.getAlertByID = async (req, res) => {
 	try {
 		const { id } = req.params
-		if (!mongoose.isValidObjectId(id)) {
-			return res.status(400).json({ ok: false, message: 'Invalid id' })
-		}
+		// if (!mongoose.isValidObjectId(id)) {
+		// 	return res.status(400).json({ ok: false, message: 'Invalid id' })
+		// }
 
 		const doc = await AlertLog.findById(id)
 			.populate('building', '_id name')
