@@ -8,6 +8,7 @@ const {
 const { logError, logger } = require('../../lib/logger')
 const fs = require('fs/promises')
 const path = require('path')
+const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
 
 class BuildingService {
 	constructor() {
@@ -16,6 +17,7 @@ class BuildingService {
 		this.nodeSchema = Node
 		this.angleNodeSchema = AngleNode
 		this.angleNodesHistory = AngleNodeHistory
+		this.verticalNodeSchema = VerticalNode
 	}
 
 	async createBuildingData(data) {
@@ -167,6 +169,42 @@ class BuildingService {
 			}
 
 			return { building, gateways, angleNodes }
+		} catch (error) {
+			// Errorni ushlash
+			console.error('Error on getBuildingNodesData:', error.message)
+			throw error // Asl xatoni qaytaramiz
+		}
+	}
+
+	async getBuildingVerticalNodesData(buildingId) {
+		try {
+			const gateways = await this.gatewaySchema.find({
+				building_id: buildingId,
+			})
+
+			if (!gateways.length) {
+				throw new Error('No gateways found for this building')
+			}
+
+			const gatewayIds = gateways.map(gateway => gateway._id)
+
+			const verticalNodes = await this.verticalNodeSchema
+				.find({
+					gateway_id: { $in: gatewayIds },
+				})
+				.populate('gateway_id', 'serial_number')
+				.sort({ doorNum: 1 })
+
+			const building = await this.buildingSchema.findOne({ _id: buildingId })
+
+			if (!building) {
+				throw new Error('Building not found')
+			}
+			if (!verticalNodes || verticalNodes.length === 0) {
+				throw new Error('No nodes found for this building')
+			}
+
+			return { building, gateways, verticalNodes }
 		} catch (error) {
 			// Errorni ushlash
 			console.error('Error on getBuildingNodesData:', error.message)

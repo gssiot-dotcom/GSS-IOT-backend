@@ -2,18 +2,18 @@ const router = require('express').Router()
 const gateway_router = router
 const gatewayController = require('./gateway.controller')
 
-gateway_router.post('/create-gateway', gatewayController.createGateway)
+gateway_router.post('/create', gatewayController.createGateway)
 
 gateway_router.get(
 	'/wake-up-gateway',
-	gatewayController.makeWakeUpOfficeGateway
+	gatewayController.makeWakeUpOfficeGateway,
 )
-gateway_router.get('/get-gateways', gatewayController.getGateways)
-gateway_router.get('/get-gateways-bytype', gatewayController.gatewaysByType)
-gateway_router.get('/get-active-gateways', gatewayController.getActiveGateways)
+gateway_router.get('/', gatewayController.getGateways)
+gateway_router.get('/gateways-bytype', gatewayController.gatewaysByType)
+gateway_router.get('/active-gateways', gatewayController.getActiveGateways)
 gateway_router.get(
-	'/get-single-gateway/:number',
-	gatewayController.getSingleGateway
+	'/single-gateway/:number',
+	gatewayController.getSingleGateway,
 )
 gateway_router.put('/gateway/zone-name', gatewayController.setGatewayZoneName)
 
@@ -25,7 +25,7 @@ gateway_router.patch('/:id/position', gatewayController.updateZoneNameById)
 // PATCH /api/gateways/by-serial/:serial/position
 gateway_router.patch(
 	'/by-serial/:serial/position',
-	gatewayController.updateZoneNameBySerial
+	gatewayController.updateZoneNameBySerial,
 )
 
 // ---- Need to check -----

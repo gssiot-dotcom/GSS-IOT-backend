@@ -2,19 +2,30 @@ const verticalNodeRouter = require('express').Router()
 const verticalNodeController = require('./vertical.node.controller')
 
 // -------------------------------- Vertical Node endpoints -------------------------------//
-verticalNodeRouter.post('/', verticalNodeController.createVerticalNodes)
+verticalNodeRouter.get('/', verticalNodeController.getVerticalNodes)
 verticalNodeRouter.get(
 	'/gateway/:gatewayId',
-	verticalNodeController.getVerticalNodesByGatewayId
+	verticalNodeController.getVerticalNodesByGatewayId,
 )
-verticalNodeRouter.get('/', verticalNodeController.getVerticalNodes)
+verticalNodeRouter.get(
+	'/graphic-data',
+	verticalNodeController.verticalNodeGraphicData,
+)
+
+verticalNodeRouter.post('/create', verticalNodeController.createVerticalNodes)
+// ---- Need to be completed
+verticalNodeRouter.post(
+	'/combine/to-gateway',
+	verticalNodeController.verticalNodeGraphicData,
+)
+
 verticalNodeRouter.delete(
 	'/:verticalNodeId',
-	verticalNodeController.deleteVerticalNodeById
+	verticalNodeController.deleteVerticalNodeById,
 )
 verticalNodeRouter.patch(
 	'/:verticalNodeId/status',
-	verticalNodeController.updateVerticalNodeStatus
+	verticalNodeController.updateVerticalNodeStatus,
 )
 
 module.exports = verticalNodeRouter

@@ -1,4 +1,4 @@
-const { logger } = require('../../lib/logger')
+const { logger, logError } = require('../../lib/logger')
 const BuildingService = require('./building.service')
 
 let buildingController = module.exports
@@ -89,6 +89,30 @@ buildingController.getBuildingAngleNodes = async (req, res) => {
 		})
 	} catch (error) {
 		console.error('Error on getBuildingAngleNodes:', error.message)
+		res.status(400).json({ state: 'fail', message: error.message })
+	}
+}
+
+buildingController.getBuildingVerticalNodes = async (req, res) => {
+	try {
+		logger('request: getBuildingVerticalNodes')
+		const { id } = req.params
+		const buildingService = new BuildingService()
+
+		const result = await buildingService.getBuildingVerticalNodesData(id)
+
+		if (!result || !result.building || !result.verticalNodes) {
+			throw new Error('No building or nodes found')
+		}
+
+		res.json({
+			state: 'success',
+			building: result.building,
+			gateways: result.gateways,
+			vertical_nodes: result.verticalNodes,
+		})
+	} catch (error) {
+		logError('Error on getBuildingVerticalNodes:', error.message)
 		res.status(400).json({ state: 'fail', message: error.message })
 	}
 }
