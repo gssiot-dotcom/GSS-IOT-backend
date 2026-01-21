@@ -16,6 +16,8 @@ gateway_router.get(
 	gatewayController.getSingleGateway,
 )
 gateway_router.put('/gateway/zone-name', gatewayController.setGatewayZoneName)
+gateway_router.post('/update-status', gatewayController.updateGatewayStatus)
+gateway_router.delete('/delete', gatewayController.deletGateway)
 
 // ------------------------- 류현 added functions --------------------- //
 

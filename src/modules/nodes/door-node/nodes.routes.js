@@ -19,4 +19,7 @@ nodesRouter.post(
 	doorNodeController.combineNodesToGateway,
 )
 
+nodesRouter.post('/update-status', doorNodeController.updateNodeStatus)
+nodesRouter.delete('/delete', doorNodeController.deleteNode)
+
 module.exports = nodesRouter

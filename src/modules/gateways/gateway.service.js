@@ -52,7 +52,7 @@ async function createGatewayData(data) {
 		})
 		if (existGateway) {
 			throw new Error(
-				`일련 번호가 ${existGateway.serial_number}인 기존 게이트웨이가 있습니다. `
+				`일련 번호가 ${existGateway.serial_number}인 기존 게이트웨이가 있습니다. `,
 			)
 		}
 
@@ -79,13 +79,13 @@ async function combineAngleNodeToGatewayData(data) {
 		})
 		if (!existGateway) {
 			throw new Error(
-				`게이트웨이가 없습니다. gateway_id=${gateway_id} 먼저 게이트웨이를 생성하세요`
+				`게이트웨이가 없습니다. gateway_id=${gateway_id} 먼저 게이트웨이를 생성하세요`,
 			)
 		}
 		// 2) kelgan nodeId lar hammasi bormi?
 		const foundNewAngleNodes = await AngleNode.find(
 			{ _id: { $in: nodesId } },
-			{ _id: 1 }
+			{ _id: 1 },
 		).lean()
 
 		if (foundNewAngleNodes.length !== nodesId.length) {
@@ -98,13 +98,13 @@ async function combineAngleNodeToGatewayData(data) {
 		const oldIds = (existGateway.angle_nodes || []).map(id => String(id))
 		const newIds = nodesId.map(id => String(id))
 		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
-			id => new mongoose.Types.ObjectId(id)
+			id => new mongoose.Types.ObjectId(id),
 		)
 
 		// 4) doorNum larni olish (old + new)
 		const nodes = await AngleNode.find(
 			{ _id: { $in: allUniqueIds } },
-			{ doorNum: 1, _id: 1 }
+			{ doorNum: 1, _id: 1 },
 		)
 		if (!nodes.length) {
 			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
@@ -143,12 +143,12 @@ async function combineAngleNodeToGatewayData(data) {
 		// 3) success bo‘lsa DB update
 		const angle_nodes = await AngleNode.updateMany(
 			{ _id: { $in: nodesId } },
-			{ $set: { node_status: false, gateway_id: existGateway._id } }
+			{ $set: { node_status: false, gateway_id: existGateway._id } },
 		)
 
 		await Gateway.updateOne(
 			{ _id: existGateway._id },
-			{ $addToSet: { angle_nodes: { $each: nodesId } } }
+			{ $addToSet: { angle_nodes: { $each: nodesId } } },
 		)
 
 		return angle_nodes
@@ -177,7 +177,7 @@ async function combineNodesToGatewayData(data) {
 		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
 		const foundNewNodes = await Node.find(
 			{ _id: { $in: nodesId } },
-			{ _id: 1 }
+			{ _id: 1 },
 		).lean()
 
 		if (foundNewNodes.length !== nodesId.length) {
@@ -191,13 +191,13 @@ async function combineNodesToGatewayData(data) {
 		const newIds = nodesId.map(id => String(id))
 
 		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
-			id => new mongoose.Types.ObjectId(id)
+			id => new mongoose.Types.ObjectId(id),
 		)
 
 		// 4) doorNum larni olish (old + new)
 		const nodes = await Node.find(
 			{ _id: { $in: allUniqueIds } },
-			{ doorNum: 1, _id: 0 }
+			{ doorNum: 1, _id: 0 },
 		).lean()
 
 		if (!nodes.length) {
@@ -232,14 +232,14 @@ async function combineNodesToGatewayData(data) {
 		// 6) success bo‘lsa: faqat NEW node larni update qilish
 		await Node.updateMany(
 			{ _id: { $in: nodesId } },
-			{ $set: { node_status: false, gateway_id: gateway._id } }
+			{ $set: { node_status: false, gateway_id: gateway._id } },
 		)
 
 		// 7) gateway.nodes ga faqat yangi nodeId larni dublikat qilmasdan qo‘shish
 		// overwrite emas, addToSet ishlatamiz
 		await Gateway.updateOne(
 			{ _id: gateway._id },
-			{ $addToSet: { nodes: { $each: nodesId } } }
+			{ $addToSet: { nodes: { $each: nodesId } } },
 		)
 
 		// updated gateway qaytaramiz
@@ -342,7 +342,7 @@ async function updateGatewayStatusData(gatewayId) {
 		const updatingGateway = await Gateway.findOneAndUpdate(
 			{ _id: gatewayId },
 			[{ $set: { gateway_status: { $not: '$gateway_status' } } }],
-			{ new: true }
+			{ new: true },
 		)
 
 		if (!updatingGateway) {
@@ -368,9 +368,9 @@ async function deleteGatewayData(gatewayId) {
 
 		// 노드가 존재한다면 node_status=true 로 복구
 		if (nodeIds.length > 0) {
-			await this.Node.updateMany(
+			await Node.updateMany(
 				{ _id: { $in: nodeIds } },
-				{ $set: { node_status: true } }
+				{ $set: { node_status: true } },
 			)
 		}
 
@@ -417,7 +417,7 @@ async function updateZoneNameById(id, zoneName) {
 	const doc = await Gateway.findByIdAndUpdate(
 		id,
 		{ $set: { zone_name: zone } },
-		{ new: true }
+		{ new: true },
 	).lean()
 
 	if (!doc) throw new Error('gateway not found')
@@ -439,7 +439,7 @@ async function updateZoneNameBySerial(serial, zoneName) {
 	const doc = await Gateway.findOneAndUpdate(
 		{ serial_number: String(serial) },
 		{ $set: { zone_name: zone } },
-		{ new: true }
+		{ new: true },
 	).lean()
 
 	if (!doc) throw new Error('gateway not found')

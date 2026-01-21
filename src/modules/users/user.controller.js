@@ -1,7 +1,7 @@
 const assert = require('assert')
 const UserService = require('./user.service')
 const jwt = require('jsonwebtoken')
-const { User, Otp } = require('./User.model')
+const { User } = require('./User.model')
 const { logger, logError } = require('../../lib/logger')
 
 let userController = module.exports
@@ -162,7 +162,7 @@ userController.resetPwVerify = async (req, res) => {
 		const result = await userService.resetPwVerify(
 			user_email,
 			otp,
-			new_password
+			new_password,
 		)
 		return res
 			.status(200)

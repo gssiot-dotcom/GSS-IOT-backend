@@ -52,7 +52,7 @@ gatewayController.makeWakeUpOfficeGateway = async (req, res) => {
 		const result = await GatewayService.makeWakeUpOfficeGateway(
 			gwNumber,
 			alarmActive,
-			alertLevel
+			alertLevel,
 		)
 
 		res.json({ state: 'succcess', message: `request sent to ${result}` })
@@ -122,6 +122,68 @@ gatewayController.gatewaysByType = async (req, res) => {
 }
 
 /**
+ * POST /api/products/status
+ * 노드 또는 게이트웨이의 상태(on/off)를 토글하는 컨트롤러입니다.
+ * - body: { product_type: 'NODE' | 'GATEWAY', product_id: ObjectId }
+ * - NODE: node_status 를 반전
+ * - GATEWAY: gateway_status 를 반전
+ */
+gatewayController.updateGatewayStatus = async (req, res) => {
+	try {
+		logger('POST: updategatewayStatus')
+		const { product_type, product_id } = req.body
+
+		if (product_type === 'GATEWAY') {
+			// 노드 활성/비활성 상태 토글
+			const result = await GatewayService.updateGatewayStatusData(product_id)
+			return res.json({
+				state: 'success',
+				updated_node: result,
+			})
+		}
+		return res.json({
+			state: 'fail',
+			message: 'undefined product type.',
+		})
+	} catch (error) {
+		logger('ERROR: update all nodes', error)
+		res.status(500).json({ state: 'Fail', message: error.message })
+	}
+}
+
+/**
+ * POST /api/products/delete
+ * 노드 또는 게이트웨이를 삭제하는 컨트롤러입니다.
+ * - body: { product_type: 'NODE' | 'GATEWAY', product_id: ObjectId }
+ * - NODE: 노드 단건 삭제
+ * - GATEWAY: 게이트웨이 삭제 + 포함된 노드 node_status true 로 복구
+ */
+gatewayController.deletGateway = async (req, res) => {
+	try {
+		logger('POST: deletGateway')
+		const { product_type, product_id } = req.query
+
+		if (product_type === 'GATEWAY') {
+			// 노드 삭제
+			const result = await GatewayService.deleteGatewayData(product_id)
+			return res.json({
+				state: 'success',
+				deleted: result,
+			})
+		}
+
+		// 타입이 잘못된 경우
+		return res.json({
+			state: 'fail',
+			message: 'undefined product type.',
+		})
+	} catch (error) {
+		logger('ERROR: update deletGateway', error)
+		res.status(500).json({ state: 'Fail', message: error.message })
+	}
+}
+
+/**
  * GET /api/gateways/active
  * gateway_status = true 인 활성(사용중) 게이트웨이만 조회하는 컨트롤러입니다.
  */
@@ -185,7 +247,7 @@ gatewayController.setGatewayZoneName = async (req, res) => {
 		// 게이트웨이의 zone_name 필드 업데이트
 		const result = await GatewayService.setGatewayZoneNameData(
 			gateway_id,
-			zone_name
+			zone_name,
 		)
 
 		return res.status(200).json({
@@ -228,7 +290,7 @@ gatewayController.updateZoneNameById = async (req, res) => {
 	try {
 		const result = await GatewayService.updateZoneNameById(
 			req.params.id,
-			req.body?.zone_name
+			req.body?.zone_name,
 		)
 		res.json(result)
 	} catch (e) {
@@ -236,10 +298,10 @@ gatewayController.updateZoneNameById = async (req, res) => {
 		const code = msg.includes('invalid gateway id')
 			? 400
 			: msg.includes('zone_name is required')
-			? 400
-			: msg.includes('gateway not found')
-			? 404
-			: 500
+				? 400
+				: msg.includes('gateway not found')
+					? 404
+					: 500
 		res.status(code).json({ ok: false, message: msg })
 	}
 }
@@ -248,7 +310,7 @@ gatewayController.updateZoneNameBySerial = async (req, res) => {
 	try {
 		const result = await GatewayService.updateZoneNameBySerial(
 			req.params.serial,
-			req.body?.zone_name
+			req.body?.zone_name,
 		)
 		res.json(result)
 	} catch (e) {
@@ -256,8 +318,8 @@ gatewayController.updateZoneNameBySerial = async (req, res) => {
 		const code = msg.includes('zone_name is required')
 			? 400
 			: msg.includes('gateway not found')
-			? 404
-			: 500
+				? 404
+				: 500
 		res.status(code).json({ ok: false, message: msg })
 	}
 }

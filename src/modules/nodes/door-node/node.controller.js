@@ -77,11 +77,11 @@ doorNodeController.downloadNodeHistory = async (req, res) => {
 		// 다운로드용 헤더 설정
 		res.setHeader(
 			'Content-Disposition',
-			'attachment; filename="building-nodes-history.xlsx"'
+			'attachment; filename="building-nodes-history.xlsx"',
 		)
 		res.setHeader(
 			'Content-Type',
-			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+			'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 		)
 
 		res.status(200).send(buffer)
@@ -98,7 +98,7 @@ doorNodeController.downloadNodeHistory = async (req, res) => {
  * - NODE: node_status 를 반전
  * - GATEWAY: gateway_status 를 반전
  */
-doorNodeController.updateProductStatus = async (req, res) => {
+doorNodeController.updateNodeStatus = async (req, res) => {
 	try {
 		logger('POST: reActivateNode')
 		const { product_type, product_id } = req.body
@@ -128,10 +128,10 @@ doorNodeController.updateProductStatus = async (req, res) => {
  * - NODE: 노드 단건 삭제
  * - GATEWAY: 게이트웨이 삭제 + 포함된 노드 node_status true 로 복구
  */
-doorNodeController.deleteProduct = async (req, res) => {
+doorNodeController.deleteNode = async (req, res) => {
 	try {
 		logger('POST: deleteProduct')
-		const { product_type, product_id } = req.body
+		const { product_type, product_id } = req.query
 
 		if (product_type === 'NODE') {
 			// 노드 삭제
@@ -222,7 +222,7 @@ doorNodeController.uploadXlsFile = async (req, res) => {
 		const result = await NodeService.setNodesPositionData(
 			nodesPositionArrParsed,
 			buildingId,
-			file
+			file,
 		)
 
 		if (result.state == 'fail') {
