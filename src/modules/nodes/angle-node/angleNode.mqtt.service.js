@@ -30,7 +30,7 @@ async function createAngleNodesData(arrayData) {
 		if (existNodes.length > 0) {
 			const existNodeNums = existNodes.map(node => node.doorNum)
 			throw new Error(
-				`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`
+				`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`,
 			)
 		}
 
@@ -82,7 +82,7 @@ async function updateAngleNodeStatusData(nodeId) {
 		const updatingNode = await AngleNode.findOneAndUpdate(
 			{ _id: nodeId },
 			[{ $set: { node_status: { $not: '$node_status' } } }],
-			{ new: true } // 변경 후 도큐먼트를 반환
+			{ new: true }, // 변경 후 도큐먼트를 반환
 		)
 
 		if (!updatingNode) {
@@ -126,6 +126,15 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 
 	// Gateway topib olamiz (buildingId uchun ham kerak)
 	const gatewayDoc = await findGatewayByLast4(gatewayNumberLast4)
+	let eventBusTopic = 'angleNode.updated'
+	if (!gatewayDoc) {
+		logger(`Gateway not found for last4=${gatewayNumberLast4}`)
+		return
+	}
+	if (gatewayDoc.gateway_type === 'VERTICAL_NODE_GATEWAY') {
+		eventBusTopic = 'verticalNode.updated'
+	}
+
 	const buildingId = gatewayDoc?.building_id || null
 	const gateway_id = gatewayDoc?._id || null
 
@@ -133,22 +142,23 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	await AngleNode.updateOne(
 		{ doorNum },
 		{ $set: { lastSeen: now, node_alive: true } },
-		{ upsert: true }
+		{ upsert: true },
 	)
 
 	// Gateway alive/lastSeen (regex bilan update qilish xavfsizroq)
 	if (gatewayDoc?._id) {
 		await GatewaySchema.updateOne(
 			{ _id: gatewayDoc._id },
-			{ $set: { lastSeen: now, gateway_alive: true } }
+			{ $set: { lastSeen: now, gateway_alive: true } },
 		)
 	}
 
 	// save_status guard
 	const angleNodeMeta = await getAngleNodePositionByDoorNum(doorNum)
 	const saveAllowed = angleNodeMeta?.save_status !== false
+	console.log(eventBusTopic)
 	if (!saveAllowed) {
-		eventBus.emit('angleNode.updated', {
+		eventBus.emit(eventBusTopic, {
 			doorNum,
 			gw_number: gatewayNumberLast4,
 			gateway_id,
@@ -187,7 +197,7 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 						sumX: newSumX,
 						sumY: newSumY,
 					},
-				}
+				},
 			)
 
 			calibDoc = {
@@ -198,19 +208,19 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 				offsetY: avgY,
 			}
 			logger(
-				`Calibration 확정(door ${doorNum}) → offsetX=${avgX}, offsetY=${avgY}`
+				`Calibration 확정(door ${doorNum}) → offsetX=${avgX}, offsetY=${avgY}`,
 			)
 		} else {
 			await AngleNodeCalibration.updateOne(
 				{ doorNum },
-				{ $set: { sampleCount: newCount, sumX: newSumX, sumY: newSumY } }
+				{ $set: { sampleCount: newCount, sumX: newSumX, sumY: newSumY } },
 			)
 			logger(`Calibration 수집 중 (door ${doorNum}) ${newCount}/${target}`)
 		}
 	}
 
-	const offsetX = calibDoc?.applied ? calibDoc.offsetX ?? 0 : 0
-	const offsetY = calibDoc?.applied ? calibDoc.offsetY ?? 0 : 0
+	const offsetX = calibDoc?.applied ? (calibDoc.offsetX ?? 0) : 0
+	const offsetY = calibDoc?.applied ? (calibDoc.offsetY ?? 0) : 0
 
 	let calibratedX = Number(angle_x ?? 0) - offsetX
 	let calibratedY = Number(angle_y ?? 0) - offsetY
@@ -230,7 +240,7 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 				node_alive: true,
 			},
 		},
-		{ new: true, upsert: true }
+		{ new: true, upsert: true },
 	)
 
 	// position snapshot
@@ -268,7 +278,7 @@ async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	})
 
 	// 🔥 Socket uchun kerakli idlarni ham qo‘shib emit qilamiz
-	eventBus.emit('angleNode.updated', {
+	eventBus.emit(eventBusTopic, {
 		...(updatedAngleNode.toObject?.() ?? updatedAngleNode),
 		gw_number: gatewayNumberLast4,
 		gateway_id,
@@ -293,7 +303,7 @@ async function setAngleNodePositionData(doorNum, position) {
 	const node = await AngleNode.findOneAndUpdate(
 		{ doorNum: n },
 		{ $set: { position } },
-		{ new: true }
+		{ new: true },
 	)
 
 	if (!node) {
@@ -326,7 +336,7 @@ async function setAngleNodePositionsData(positions) {
 		const node = await AngleNode.findOneAndUpdate(
 			{ doorNum: n },
 			{ $set: { position: item.position } },
-			{ new: true }
+			{ new: true },
 		)
 
 		if (!node) {
@@ -368,11 +378,11 @@ async function uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
 				// ENOENT(파일 없음)은 무시, 그 외 에러만 로그
 				if (error.code !== 'ENOENT') {
 					logError(
-						`Failed to delete old image ${oldFilePath}: ${error.message}`
+						`Failed to delete old image ${oldFilePath}: ${error.message}`,
 					)
 				} else {
 					logError(
-						`Failed to delete old image ${oldFilePath}: ${error.message}`
+						`Failed to delete old image ${oldFilePath}: ${error.message}`,
 					)
 				}
 			}
@@ -382,7 +392,7 @@ async function uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
 		const angleNode = await AngleNode.findByIdAndUpdate(
 			nodeId,
 			{ $set: { angle_node_img: imageUrl, position: nodePosition } },
-			{ new: true }
+			{ new: true },
 		)
 		if (!angleNode) throw new Error('There is no any angleNode with this _id')
 		return angleNode
@@ -410,7 +420,7 @@ async function setAngleNodePosition(doorNum, position) {
 	const node = await AngleNode.findOneAndUpdate(
 		{ doorNum: n },
 		{ $set: { position } },
-		{ new: true }
+		{ new: true },
 	)
 
 	if (!node) {
@@ -443,7 +453,7 @@ async function setAngleNodePositions(positions) {
 		const node = await AngleNode.findOneAndUpdate(
 			{ doorNum: n },
 			{ $set: { position: item.position } },
-			{ new: true }
+			{ new: true },
 		)
 
 		if (!node) {

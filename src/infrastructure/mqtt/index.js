@@ -6,7 +6,7 @@ const {
 	handleNodeMqttMessage,
 } = require('../../modules/nodes/door-node/node.mqtt.service')
 const {
-	handleAngleMqttMessage,
+	handleAngleNodeMqttMessage,
 } = require('../../modules/nodes/angle-node/angleNode.mqtt.service')
 
 // export qilish kerak bo‘lsa:
@@ -28,7 +28,7 @@ function initMqtt() {
 		try {
 			const data = JSON.parse(buf.toString())
 			const gatewayNumberLast4 = topic.split('/').pop().slice(-4)
-			logger('MQTT incoming data:', data)
+			// logger('MQTT incoming data:', data)
 
 			// routing:
 			if (topic.startsWith(topics.nodePrefix)) {
@@ -37,7 +37,7 @@ function initMqtt() {
 			}
 
 			if (topic.startsWith(topics.anglePrefix)) {
-				await handleAngleMqttMessage({ topic, data, gatewayNumberLast4 })
+				await handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 })
 				return
 			}
 

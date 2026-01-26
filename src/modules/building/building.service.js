@@ -142,6 +142,7 @@ class BuildingService {
 			const gateways = await this.gatewaySchema
 				.find({
 					building_id: buildingId,
+					gateway_type: 'GATEWAY',
 				})
 				.populate('nodes', 'doorNum')
 				.populate('angle_nodes', 'doorNum')
@@ -180,6 +181,7 @@ class BuildingService {
 		try {
 			const gateways = await this.gatewaySchema.find({
 				building_id: buildingId,
+				gateway_type: 'VERTICAL_NODE_GATEWAY',
 			})
 
 			if (!gateways.length) {
@@ -188,7 +190,7 @@ class BuildingService {
 
 			const gatewayIds = gateways.map(gateway => gateway._id)
 
-			const verticalNodes = await this.verticalNodeSchema
+			const verticalNodes = await this.angleNodeSchema
 				.find({
 					gateway_id: { $in: gatewayIds },
 				})

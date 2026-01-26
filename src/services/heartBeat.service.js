@@ -2,8 +2,10 @@
 const GatewaySchema = require('../modules/gateways/gateway.model')
 const { AngleNode } = require('../modules/nodes/angle-node/angleNode.model')
 
+// ===== Loop sikl bo'lib har 10 minutda bir marttadan db ni tekshiradi. agar oxirgi kelgan data kelganiga 1 soatdan oshgan bo'lsa product-status ni false qiladi. bu esa product bilan connection uzilganini bildiradi.
+
 function startHeartbeatJob({
-	intervalMs = 5 * 60 * 1000,
+	intervalMs = 10 * 60 * 1000,
 	windowMs = 60 * 60 * 1000,
 } = {}) {
 	// intervalMs: necha daqiqada tekshiramiz (default 5 minut)
@@ -18,11 +20,11 @@ function startHeartbeatJob({
 			{
 				$or: [{ lastSeen: { $exists: false } }, { lastSeen: { $lt: cutoff } }],
 			},
-			{ $set: { gateway_alive: false } }
+			{ $set: { gateway_alive: false } },
 		)
 		await GatewaySchema.updateMany(
 			{ lastSeen: { $gte: cutoff } },
-			{ $set: { gateway_alive: true } }
+			{ $set: { gateway_alive: true } },
 		)
 
 		// Node lar uchun ham xuddi shu
@@ -30,11 +32,11 @@ function startHeartbeatJob({
 			{
 				$or: [{ lastSeen: { $exists: false } }, { lastSeen: { $lt: cutoff } }],
 			},
-			{ $set: { node_alive: false } }
+			{ $set: { node_alive: false } },
 		)
 		await AngleNode.updateMany(
 			{ lastSeen: { $gte: cutoff } },
-			{ $set: { node_alive: true } }
+			{ $set: { node_alive: true } },
 		)
 
 		// Agar xohlasangiz shu yerda “o‘zgarganlar”ni socket orqali admin dashboardga emit qilishingiz ham mumkin

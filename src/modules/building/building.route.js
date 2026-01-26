@@ -17,19 +17,13 @@ buildingRouter.get(
 // 	'/buildings/:id/angle-nodes/summary',
 // 	buildingController.getAngleNodeSummary
 // )
-buildingRouter.delete(
-	'/delete/building/:buildingId',
-	buildingController.deleteBuilding,
-)
+buildingRouter.delete('/delete/:buildingId', buildingController.deleteBuilding)
 // 🔹 여기 추가
 buildingRouter.put(
 	'/building/change-gateway-building',
 	buildingController.changeGatewayBuilding,
 )
 
-buildingRouter.put(
-	'/building/set-alarm-level',
-	buildingController.setAlarmLevel,
-)
+buildingRouter.put('/set-alarm-level', buildingController.setAlarmLevel)
 
 module.exports = buildingRouter

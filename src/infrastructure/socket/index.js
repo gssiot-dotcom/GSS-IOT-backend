@@ -13,21 +13,35 @@ function initSocket(serverIo) {
 
 	// Node update -> building topic
 	eventBus.on('node.updated', async updatedNode => {
+		// console.log('eventBus data income:', updatedNode)
 		const gateway = await getGatewayById(updatedNode.gateway_id)
 		if (!gateway) return
 
 		const buildingId = gateway.building_id
-		const topic = `mqtt/building/${buildingId}`
+		const topic = `socket/building/${buildingId}/node`
 		io.emit(topic, updatedNode)
 	})
 
 	// Angle update -> buildingId bo‘lsa direct
-	eventBus.on('angle.updated', async anglePayload => {
+	eventBus.on('angleNode.updated', async anglePayload => {
 		// Biz angle payloadga buildingId qo‘shib yubordik:
+		// console.log('eventBus data income:', anglePayload)
+
 		const buildingId = anglePayload.buildingId
 		if (!buildingId) return
 
-		const topic = `${buildingId}_angle-nodes`
+		const topic = `socket/building/${buildingId}/angle-nodes`
+		io.emit(topic, anglePayload)
+	})
+
+	eventBus.on('verticalNode.updated', async anglePayload => {
+		// Biz angle payloadga buildingId qo‘shib yubordik:
+		// console.log('verticalNode.updated', anglePayload)
+
+		const buildingId = anglePayload.buildingId
+		if (!buildingId) return
+
+		const topic = `socket/building/${buildingId}/vertical-nodes`
 		io.emit(topic, anglePayload)
 	})
 
