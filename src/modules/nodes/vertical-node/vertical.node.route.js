@@ -16,7 +16,7 @@ verticalNodeRouter.post('/create', verticalNodeController.createVerticalNodes)
 // ---- Need to be completed
 verticalNodeRouter.post(
 	'/combine/to-gateway',
-	verticalNodeController.verticalNodeGraphicData,
+	verticalNodeController.combineVerticalNodesToGateway,
 )
 
 verticalNodeRouter.delete(

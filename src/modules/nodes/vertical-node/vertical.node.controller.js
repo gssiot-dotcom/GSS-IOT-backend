@@ -1,6 +1,7 @@
 const VerticalNodeService = require('./vertical.node.service')
 const { logger, logError } = require('../../../lib/logger')
 const { VerticalNodeHistory } = require('./Vertical.node.model')
+const GatewayServie = require('../../gateways/gateway.service')
 
 // controller 객체 생성
 let verticalNodeController = module.exports
@@ -112,6 +113,23 @@ verticalNodeController.updateVerticalNodeStatus = async (req, res) => {
 	} catch (error) {
 		logError(error.message)
 		res.status(400).json({ state: 'fail', message: error.message })
+	}
+}
+
+verticalNodeController.combineVerticalNodesToGateway = async (req, res) => {
+	try {
+		logger('request: combineVerticalNodesToGateway:')
+		const data = req.body
+
+		await GatewayServie.combineVerticalNodesToGateway(data)
+
+		res.json({
+			state: 'succcess',
+			message: '수직 노드가 게이트웨이에 할당되었습니다',
+		})
+	} catch (error) {
+		logError(error.message)
+		res.json({ state: 'fail', message: error.message })
 	}
 }
 

@@ -5,6 +5,7 @@ const { Node } = require('../nodes/door-node/node.model')
 const { AngleNode } = require('../nodes/angle-node/angleNode.model')
 const Gateway = require('./gateway.model')
 const { default: mongoose } = require('mongoose')
+const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
 
 // ------------------------- Additional functions ------------------------------- //
 async function publishAsync(client, topic, payload) {
@@ -231,6 +232,99 @@ async function combineNodesToGatewayData(data) {
 
 		// 6) success bo‘lsa: faqat NEW node larni update qilish
 		await Node.updateMany(
+			{ _id: { $in: nodesId } },
+			{ $set: { node_status: false, gateway_id: gateway._id } },
+		)
+
+		// 7) gateway.nodes ga faqat yangi nodeId larni dublikat qilmasdan qo‘shish
+		// overwrite emas, addToSet ishlatamiz
+		await Gateway.updateOne(
+			{ _id: gateway._id },
+			{ $addToSet: { nodes: { $each: nodesId } } },
+		)
+
+		// updated gateway qaytaramiz
+		const updatedGateway = await Gateway.findById(gateway._id)
+		return updatedGateway
+	} catch (error) {
+		throw new Error(`Error on combining-nodes-to-gateway: ${error.message}`)
+	}
+}
+
+async function combineNodesToGatewayData(data) {
+	try {
+		const { gateway_id, vertical_nodes: nodesId } = data
+
+		// 0) input validation
+		if (!gateway_id) throw new Error('gateway_id is required')
+		if (!Array.isArray(nodesId) || nodesId.length === 0) {
+			throw new Error('nodes array (nodeIds) is required')
+		}
+
+		// 1) gateway mavjudmi
+		const gateway = await Gateway.findById(gateway_id)
+		if (!gateway) {
+			throw new Error('Gateway not found, 먼저 게이트웨이를 생성하세요.')
+		}
+
+		// 2) kelgan nodeId lar hammasi bormi?
+		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
+		const foundNewNodes = await VerticalNode.find(
+			{ _id: { $in: nodesId } },
+			{ _id: 1 },
+		).lean()
+
+		if (foundNewNodes.length !== nodesId.length) {
+			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
+			const missing = nodesId.filter(id => !foundSet.has(String(id)))
+			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
+		}
+
+		// 3) old node ids + new node ids => unique ids
+		const oldIds = (gateway.nodes || []).map(id => String(id))
+		const newIds = nodesId.map(id => String(id))
+
+		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
+			id => new mongoose.Types.ObjectId(id),
+		)
+
+		// 4) doorNum larni olish (old + new)
+		const nodes = await VerticalNode.find(
+			{ _id: { $in: allUniqueIds } },
+			{ doorNum: 1, _id: 0 },
+		).lean()
+
+		if (!nodes.length) {
+			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
+		}
+
+		// 5) MQTT publish
+		const gw_number = gateway.serial_number
+		const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
+
+		const publishData = {
+			cmd: 2,
+			nodeType: 2,
+			numNodes: nodes.length,
+			nodes: nodes.map(n => n.doorNum),
+		}
+
+		const mqttClient = getMqttClient()
+		if (!mqttClient || !mqttClient.connected) {
+			throw new Error('MQTT client is not connected (initMqtt called?)')
+		}
+
+		// 2) response kutish promise'ini oldindan tayyorlab olamiz
+		const waitPromise = waitForGatewayResponse({ gw_number, timeoutMs: 10000 })
+
+		// 1) publish
+		await publishAsync(mqttClient, topic, publishData)
+
+		// 2) endi kutamiz
+		await waitPromise
+
+		// 6) success bo‘lsa: faqat NEW node larni update qilish
+		await VerticalNode.updateMany(
 			{ _id: { $in: nodesId } },
 			{ $set: { node_status: false, gateway_id: gateway._id } },
 		)
