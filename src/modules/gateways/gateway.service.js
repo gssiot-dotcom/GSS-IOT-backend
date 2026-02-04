@@ -251,7 +251,7 @@ async function combineNodesToGatewayData(data) {
 	}
 }
 
-async function combineNodesToGatewayData(data) {
+async function combineVerticalNodesToGateway(data) {
 	try {
 		const { gateway_id, vertical_nodes: nodesId } = data
 
@@ -566,6 +566,7 @@ module.exports = {
 	setGatewayZoneNameData,
 	combineNodesToGatewayData,
 	combineAngleNodeToGatewayData,
+	combineVerticalNodesToGateway,
 	updateZoneNameById,
 	updateZoneNameBySerial,
 }
