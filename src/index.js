@@ -39,13 +39,13 @@ app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
 
 // ===== Basic routes =====
-app.get('/', (req, res) => {
-	res.send('Welcome to GSSIOT projects new Server! :)')
-})
+// app.get('/', (req, res) => {
+// 	res.send('Welcome to GSSIOT projects new Server! :)')
+// })
 app.get('/health', (req, res) => res.status(200).json({ ok: true }))
 
 // ===== Mount routes =====
-app.use('/api', router)
+app.use('/', router)
 
 // ===== 404 =====
 app.use((req, res, next) => {
