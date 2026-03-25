@@ -10,10 +10,10 @@ company_router.get('/:id', companyController.getClient)
 
 company_router.delete('/delete/:clientId', companyController.deleteCompany)
 
-company_router.put(
-	'/upload-company-plan',
-	uploadImage.single('image'),
-	companyController.uploadBuildingImage,
-)
+// company_router.put(
+// 	'/upload-company-plan',
+// 	uploadImage.single('image'),
+// 	companyController.uploadBuildingImage,
+// )
 
 module.exports = company_router

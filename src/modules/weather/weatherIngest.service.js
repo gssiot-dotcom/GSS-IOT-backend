@@ -3,11 +3,11 @@
 // 저장/실패/스킵 모두 콘솔 로그 출력
 
 const axios = require('axios')
-const Building = require('../modules/building/building.model')
-const Weather = require('../modules/weather/weather.model')
+const Building = require('../building/building.model')
+const Weather = require('../weather/weather.model')
 const { geocodeAddress } = require('./geocode.service') // services/geocode.service.js
-const { degToCompass } = require('../utils/wind') // utils/wind.js
-const { logger, logError, logWarn } = require('../lib/logger')
+const { degToCompass } = require('../../utils/wind') // utils/wind.js
+const { logger, logError, logWarn } = require('../../lib/logger')
 
 const OWM_KEY = process.env.OWM_API_KEY
 const KMA_KEY = process.env.KMA_API_KEY // ← 추가: 기상청 API 허브 키(태풍 EFF 조회용)

@@ -30,7 +30,7 @@ async function getBuildingHeaderById(buildingId) {
 	try {
 		const b = await Building.findById(buildingId)
 			.select(
-				'company_name company building_name name building_addr address addr'
+				'company_name company building_name name building_addr address addr',
 			)
 			.lean()
 		if (b) {
@@ -63,11 +63,7 @@ async function buildDailyHwpxBuffer({
 	t1,
 	buildingId,
 	doorNums,
-	templatePath = path.join(
-		process.cwd(),
-		'REPORT_TEMPLATES',
-		'daily_report.hwpx'
-	),
+	templatePath,
 	extraMap = {},
 	dateLabel, // 라우트에서 label 전달(단일: YYYY-MM-DD, 기간: YYYY-MM-DD~YYYY-MM-DD)
 }) {

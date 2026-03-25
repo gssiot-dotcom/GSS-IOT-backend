@@ -1,4 +1,3 @@
-// src/app.js
 const express = require('express')
 const cookieParser = require('cookie-parser')
 const cors = require('cors')
@@ -13,7 +12,7 @@ const allowedOrigins = [
 	'http://13.125.157.133:3001',
 	'http://13.125.157.133',
 	'http://localhost:5173',
-	'http://192.168.1.102:3005',
+	// 'http://192.168.1.102:3005',
 ]
 
 // ===== CORS options =====
@@ -31,7 +30,7 @@ const corsOptions = {
 app.use(express.json({ limit: '2mb' }))
 app.use(cookieParser())
 app.use(express.urlencoded({ extended: true }))
-app.use('/static', express.static(path.join(__dirname, 'static')))
+// app.use('/static', express.static(path.join(__dirname, 'static')))
 
 app.use(cors(corsOptions))
 
@@ -39,9 +38,6 @@ app.use(cors(corsOptions))
 app.options('*', cors(corsOptions))
 
 // ===== Basic routes =====
-// app.get('/', (req, res) => {
-// 	res.send('Welcome to GSSIOT projects new Server! :)')
-// })
 app.get('/health', (req, res) => res.status(200).json({ ok: true }))
 
 // ===== Mount routes =====

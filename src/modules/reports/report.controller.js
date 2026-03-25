@@ -1,4 +1,5 @@
 const path = require('path')
+const fs = require('fs')
 const Building = require('../building/building.model')
 const { buildDailyHwpxBuffer } = require('./reportDailyCombined.service')
 const {
@@ -145,16 +146,16 @@ function parseRange(q) {
 
 function resolveTemplatePath() {
 	const cands = [
-		process.env.REPORT_TEMPLATE_PATH,
-		path.join(process.cwd(), 'templates', 'daily_report.hwpx'),
-		'/mnt/data/daily_report.hwpx',
+		path.join(process.cwd(), 'src', 'templates', 'daily_report.hwpx'),
 	].filter(Boolean)
+
 	for (const p of cands) {
 		try {
 			if (fs.existsSync(p)) return p
 		} catch {}
 	}
-	return path.join(process.cwd(), 'templates', 'daily_report.hwpx')
+
+	throw new Error(`템플릿 파일을 찾을 수 없습니다: ${cands.join(', ')}`)
 }
 
 //  ------------------- getTable1 Additional functions ---------------- //

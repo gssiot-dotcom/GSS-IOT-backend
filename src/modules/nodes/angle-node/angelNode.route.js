@@ -69,11 +69,11 @@ angleNodeRouter.post(
 	angleNodeController.angleNodeCalibrationCancelAll,
 )
 
-angleNodeRouter.put(
-	'/angle-node/:id',
-	uploadImage.single('image'),
-	angleNodeController.uploadAngleNodeImage,
-)
+// angleNodeRouter.put(
+// 	'/angle-node/:id',
+// 	uploadImage.single('image'),
+// 	angleNodeController.uploadAngleNodeImage,
+// )
 
 angleNodeRouter.put(
 	'/angle-node/position',

@@ -7,6 +7,13 @@ const GatewaySchema = require('../../gateways/gateway.model')
 const { eventBus } = require('../../../shared/eventBus')
 const { logger, logError } = require('../../../lib/logger')
 const { checkAndLogAngle } = require('../../../services/Alert.service') // sizdagi pathga moslang
+const { getGatewayContextByLast4 } = require('../../../cache/gatewayContext')
+const { persistQueue } = require('../../../utils/ConcurrencyQueue')
+const {
+	getCalibratedFromCache,
+	setCalibrationOffsetCache,
+	refreshCalibrationOffsetFromDb,
+} = require('../../../cache/calibration')
 
 async function findGatewayByLast4(last4) {
 	if (!last4) return null
@@ -116,174 +123,54 @@ async function deleteAngleNodeData(nodeId) {
 }
 
 async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
+	logger('ANG-Node MPU-sensor data:', data, gatewayNumberLast4)
 	const now = new Date()
 
+	const ctx = await getGatewayContextByLast4(gatewayNumberLast4)
+	if (!ctx) return
+
+	const { gateway_id, buildingId, gateway_type, gw_position } = ctx
+	const eventName =
+		gateway_type === 'VERTICAL_NODE_GATEWAY' ? 'rt.vertical' : 'rt.angle'
+
 	const doorNum = data.doorNum
-	const angle_x = data.angle_x
-	const angle_y = data.angle_y
+	const rawX = Number(data.angle_x ?? 0)
+	const rawY = Number(data.angle_y ?? 0)
 
-	logger(`MPU-6500 sensor data from gateway-${gatewayNumberLast4}:`, data)
-
-	// Gateway topib olamiz (buildingId uchun ham kerak)
-	const gatewayDoc = await findGatewayByLast4(gatewayNumberLast4)
-	let eventBusTopic = 'angleNode.updated'
-	if (!gatewayDoc) {
-		logger(`Gateway not found for last4=${gatewayNumberLast4}`)
-		return
-	}
-	if (gatewayDoc.gateway_type === 'VERTICAL_NODE_GATEWAY') {
-		eventBusTopic = 'verticalNode.updated'
-	}
-
-	const buildingId = gatewayDoc?.building_id || null
-	const gateway_id = gatewayDoc?._id || null
-
-	// Node alive/lastSeen
-	await AngleNode.updateOne(
-		{ doorNum },
-		{ $set: { lastSeen: now, node_alive: true } },
-		{ upsert: true },
+	// realtime: cache offset bo‘lsa tez hisobla, bo‘lmasa raw bilan ketadi
+	const { calibratedX, calibratedY } = getCalibratedFromCache(
+		doorNum,
+		rawX,
+		rawY,
 	)
 
-	// Gateway alive/lastSeen (regex bilan update qilish xavfsizroq)
-	if (gatewayDoc?._id) {
-		await GatewaySchema.updateOne(
-			{ _id: gatewayDoc._id },
-			{ $set: { lastSeen: now, gateway_alive: true } },
-		)
-	}
+	// ✅ realtime emit (DBsiz)
+	eventBus.emit(eventName, {
+		doorNum,
+		gw_number: gatewayNumberLast4,
+		gateway_id,
+		buildingId,
+		angle_x: calibratedX,
+		angle_y: calibratedY,
+		gw_position,
+		lastSeen: now,
+	})
 
-	// save_status guard
-	const angleNodeMeta = await getAngleNodePositionByDoorNum(doorNum)
-	const saveAllowed = angleNodeMeta?.save_status !== false
-	console.log(eventBusTopic)
-	if (!saveAllowed) {
-		eventBus.emit(eventBusTopic, {
+	// ✅ background persist
+	persistQueue.add(() =>
+		persistAngleStuff({
+			now,
 			doorNum,
 			gw_number: gatewayNumberLast4,
 			gateway_id,
 			buildingId,
-			node_alive: true,
-			lastSeen: now,
-			save_skipped: true,
-		})
-		logger(`save_status=false → skip (door ${doorNum})`)
-		return
-	}
-
-	// ===== Calibration =====
-	let calibDoc = await AngleNodeCalibration.findOne({ doorNum }).lean()
-
-	if (calibDoc?.collecting) {
-		const newCount = (calibDoc.sampleCount ?? 0) + 1
-		const newSumX = (calibDoc.sumX ?? 0) + Number(angle_x ?? 0)
-		const newSumY = (calibDoc.sumY ?? 0) + Number(angle_y ?? 0)
-		const target = calibDoc.sampleTarget ?? 5
-
-		if (newCount >= target) {
-			const avgX = newSumX / newCount
-			const avgY = newSumY / newCount
-
-			await AngleNodeCalibration.updateOne(
-				{ doorNum },
-				{
-					$set: {
-						applied: true,
-						collecting: false,
-						offsetX: avgX,
-						offsetY: avgY,
-						appliedAt: new Date(),
-						sampleCount: newCount,
-						sumX: newSumX,
-						sumY: newSumY,
-					},
-				},
-			)
-
-			calibDoc = {
-				...calibDoc,
-				applied: true,
-				collecting: false,
-				offsetX: avgX,
-				offsetY: avgY,
-			}
-			logger(
-				`Calibration 확정(door ${doorNum}) → offsetX=${avgX}, offsetY=${avgY}`,
-			)
-		} else {
-			await AngleNodeCalibration.updateOne(
-				{ doorNum },
-				{ $set: { sampleCount: newCount, sumX: newSumX, sumY: newSumY } },
-			)
-			logger(`Calibration 수집 중 (door ${doorNum}) ${newCount}/${target}`)
-		}
-	}
-
-	const offsetX = calibDoc?.applied ? (calibDoc.offsetX ?? 0) : 0
-	const offsetY = calibDoc?.applied ? (calibDoc.offsetY ?? 0) : 0
-
-	let calibratedX = Number(angle_x ?? 0) - offsetX
-	let calibratedY = Number(angle_y ?? 0) - offsetY
-	calibratedX = parseFloat(calibratedX.toFixed(2))
-	calibratedY = parseFloat(calibratedY.toFixed(2))
-
-	// Latest update
-	const updatedAngleNode = await AngleNode.findOneAndUpdate(
-		{ doorNum },
-		{
-			$set: {
-				angle_x: Number(angle_x ?? 0),
-				angle_y: Number(angle_y ?? 0),
-				calibrated_x: calibratedX,
-				calibrated_y: calibratedY,
-				lastSeen: now,
-				node_alive: true,
-			},
-		},
-		{ new: true, upsert: true },
+			gw_position,
+			rawX,
+			rawY,
+			calibratedX,
+			calibratedY,
+		}),
 	)
-
-	// position snapshot
-	const node_position = angleNodeMeta?.position
-		? String(angleNodeMeta.position)
-		: ''
-	const gw_position = gatewayDoc?.zone_name ? String(gatewayDoc.zone_name) : ''
-
-	await new AngleNodeHistory({
-		gw_number: gatewayNumberLast4,
-		doorNum,
-		angle_x: calibratedX,
-		angle_y: calibratedY,
-		gw_position,
-		node_position,
-	})
-		.save()
-		.catch(err => logError('AngleNodeHistory 저장 오류:', err?.message || err))
-
-	// Alert
-	await checkAndLogAngle({
-		gateway_serial: String(gatewayNumberLast4),
-		doorNum,
-		metric: 'angle_x',
-		value: Number(calibratedX),
-		raw: { angle_x, angle_y, calibratedX, calibratedY },
-	})
-
-	await checkAndLogAngle({
-		gateway_serial: String(gatewayNumberLast4),
-		doorNum,
-		metric: 'angle_y',
-		value: Number(calibratedY),
-		raw: { angle_x, angle_y, calibratedX, calibratedY },
-	})
-
-	// 🔥 Socket uchun kerakli idlarni ham qo‘shib emit qilamiz
-	eventBus.emit(eventBusTopic, {
-		...(updatedAngleNode.toObject?.() ?? updatedAngleNode),
-		gw_number: gatewayNumberLast4,
-		gateway_id,
-		buildingId,
-	})
 }
 
 /**
@@ -478,4 +365,208 @@ module.exports = {
 	// 류현 added
 	setAngleNodePosition,
 	setAngleNodePositions,
+}
+
+// ======================= MQTT cold path optimizing ======================== //
+
+const lastSeenGate = new Map()
+function shouldUpdate(key, everyMs = 10_000) {
+	const t = Date.now()
+	const last = lastSeenGate.get(key) || 0
+	if (t - last < everyMs) return false
+	lastSeenGate.set(key, t)
+	return true
+}
+
+async function getAngleMeta(doorNum) {
+	// sening funksiyang:
+	// return { position, save_status }
+	return getAngleNodePositionByDoorNum(doorNum)
+}
+
+async function collectAndMaybeFinalizeCalibration({
+	doorNum,
+	rawX,
+	rawY,
+	now,
+}) {
+	// collecting bo‘lmasa null qaytadi (DB 1 ta call bo‘ladi)
+	const doc = await AngleNodeCalibration.findOneAndUpdate(
+		{ doorNum, collecting: true },
+		{
+			$inc: {
+				sampleCount: 1,
+				sumX: Number(rawX ?? 0),
+				sumY: Number(rawY ?? 0),
+			},
+			$set: { updatedAt: now },
+		},
+		{ new: true }, // updated doc qaytadi
+	).lean()
+
+	if (!doc) return { status: 'not_collecting' }
+
+	const target = doc.sampleTarget ?? 5
+	const cnt = doc.sampleCount ?? 0
+	const sumX = Number(doc.sumX ?? 0)
+	const sumY = Number(doc.sumY ?? 0)
+
+	if (cnt < target) {
+		return { status: 'collecting', count: cnt, target }
+	}
+
+	// targetga yetdi -> finalize
+	const avgX = sumX / cnt
+	const avgY = sumY / cnt
+
+	const res = await AngleNodeCalibration.updateOne(
+		{ _id: doc._id, collecting: true }, // faqat 1 marta finalize bo‘lsin
+		{
+			$set: {
+				applied: true,
+				collecting: false,
+				offsetX: avgX,
+				offsetY: avgY,
+				appliedAt: now,
+			},
+		},
+	)
+
+	if (res.modifiedCount === 1) {
+		// ✅ cache’ni yangila (senda setCalibrationOffsetCache bo‘lsa shuni chaqir)
+		// Masalan: setCalibrationOffsetCache(doorNum, avgX, avgY)
+		setCalibrationOffsetCache(doorNum, avgX, avgY, {
+			buildingId,
+			applied: true,
+		})
+		return { status: 'finalized', offsetX: avgX, offsetY: avgY }
+	}
+
+	// kimdir finalize qilib bo‘lgan
+	return { status: 'already_finalized' }
+}
+
+async function persistAngleStuff(payload) {
+	const {
+		now,
+		doorNum,
+		gw_number,
+		gateway_id,
+		buildingId,
+		gw_position = '',
+		rawX,
+		rawY,
+		calibratedX: calX_in,
+		calibratedY: calY_in,
+	} = payload
+
+	try {
+		await refreshCalibrationOffsetFromDb(doorNum, buildingId)
+		// 1) meta (save_status / position)
+		const meta = await getAngleMeta(doorNum)
+		const saveAllowed = meta?.save_status !== false
+		const node_position = meta?.position ? String(meta.position) : ''
+
+		// 2) alive/lastSeen minimal update (har doim)
+		// (eslatma: idealda {buildingId, doorNum} composite key)
+		await AngleNode.updateOne(
+			{ doorNum },
+			{
+				$set: {
+					lastSeen: now,
+					node_alive: true,
+					gateway_id,
+					buildingId,
+				},
+			},
+			{ upsert: true },
+		)
+
+		// gateway lastSeen debounce
+		if (gateway_id && shouldUpdate(`gw:${gateway_id}`, 30_000)) {
+			await GatewaySchema.updateOne(
+				{ _id: gateway_id },
+				{ $set: { lastSeen: now, gateway_alive: true } },
+			)
+		}
+
+		// 3) save_status=false bo‘lsa qolgan hammasini skip (history/alerts/calibration/latest values)
+		if (!saveAllowed) {
+			return
+		}
+
+		// 4) calibration collecting bo‘lsa update/finalize
+		// realtime’da cache offset ishlatganmiz. Agar finalize shu msg’da bo‘lsa,
+		// DB uchun calibrated’ni yangi offset bilan qayta hisoblaymiz.
+		let calibratedX = Number(calX_in ?? 0)
+		let calibratedY = Number(calY_in ?? 0)
+
+		const calibRes = await collectAndMaybeFinalizeCalibration({
+			doorNum,
+			rawX,
+			rawY,
+			now,
+			buildingId,
+		})
+
+		if (calibRes.status === 'finalized') {
+			calibratedX = Number(rawX ?? 0) - Number(calibRes.offsetX ?? 0)
+			calibratedY = Number(rawY ?? 0) - Number(calibRes.offsetY ?? 0)
+		}
+
+		calibratedX = parseFloat(calibratedX.toFixed(2))
+		calibratedY = parseFloat(calibratedY.toFixed(2))
+
+		// 5) Latest snapshot (raw + calibrated)
+		const updatedAngleNode = await AngleNode.findOneAndUpdate(
+			{ doorNum },
+			{
+				$set: {
+					angle_x: Number(rawX ?? 0),
+					angle_y: Number(rawY ?? 0),
+					calibrated_x: calibratedX,
+					calibrated_y: calibratedY,
+					lastSeen: now,
+					node_alive: true,
+					gateway_id,
+					buildingId,
+				},
+			},
+			{ new: true, upsert: true },
+		)
+
+		// 6) History
+		await AngleNodeHistory.create({
+			gw_number,
+			doorNum,
+			angle_x: calibratedX,
+			angle_y: calibratedY,
+			gw_position,
+			node_position,
+			createdAt: now,
+		}).catch(err =>
+			logError('AngleNodeHistory 저장 오류:', err?.message || err),
+		)
+
+		// 7) Alerts (x2)
+		await checkAndLogAngle({
+			gateway_serial: String(gw_number),
+			doorNum,
+			metric: 'angle_x',
+			value: Number(calibratedX),
+			raw: { angle_x: rawX, angle_y: rawY, calibratedX, calibratedY },
+		})
+
+		await checkAndLogAngle({
+			gateway_serial: String(gw_number),
+			doorNum,
+			metric: 'angle_y',
+			value: Number(calibratedY),
+			raw: { angle_x: rawX, angle_y: rawY, calibratedX, calibratedY },
+		})
+
+		return updatedAngleNode
+	} catch (err) {
+		logError('persistAngleStuff error:', err?.message || err)
+	}
 }

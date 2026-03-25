@@ -7,14 +7,12 @@ const cron = require('node-cron')
 const { Server } = require('socket.io')
 
 const { app, allowedOrigins } = require('./index')
-
 const { initMqtt } = require('./infrastructure/mqtt')
 const { initSocket } = require('./infrastructure/socket')
-
 const { startHeartbeatJob } = require('./services/heartBeat.service')
 const {
 	ingestAllBuildingsWeather,
-} = require('./services/weatherIngest.service')
+} = require('./modules/weather/weatherIngest.service')
 
 const server = http.createServer(app)
 
