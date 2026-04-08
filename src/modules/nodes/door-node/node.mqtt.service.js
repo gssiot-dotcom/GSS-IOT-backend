@@ -123,6 +123,34 @@ async function getAllTypeActiveNodesData() {
 }
 
 /**
+ * 단일 노드 위치 업데이트
+ * @param {Number} doorNum 
+ * @param {String} position 
+ */
+async function updateNodePositionData(doorNum, position) {
+	try {
+		const updatedNode = await Node.findOneAndUpdate(
+			{ doorNum: doorNum },
+			{ $set: { position: position } },
+			{ new: true } // 업데이트된 결과 객체 반환
+		)
+
+		if (!updatedNode) {
+			throw new Error('해당 번호의 노드를 찾을 수 없습니다.')
+		}
+
+		return updatedNode
+	} catch (error) {
+		throw error
+	}
+}
+
+// module.exports에 추가 잊지 마세요!
+module.exports = {
+	// ... 기존 export 항목들
+	updateNodePositionData,
+}
+/**
  * 빌딩 ID 기준으로 노드 히스토리 통계를 내고, 엑셀 파일 버퍼를 생성
  * Flow:
  *  1. Building 조회 → gateway_sets 에 포함된 게이트웨이들의 serial_number 추출
@@ -248,6 +276,30 @@ async function deleteNodeData(nodeId) {
 }
 
 /**
+ * 단일 노드 위치 업데이트
+ * @param {Number} doorNum 
+ * @param {String} position 
+ */
+async function updateNodePositionData(doorNum, position) {
+	try {
+		const updatedNode = await Node.findOneAndUpdate(
+			{ doorNum: doorNum },
+			{ $set: { position: position } },
+			{ new: true } // 업데이트된 결과 객체 반환
+		)
+
+		if (!updatedNode) {
+			throw new Error('해당 번호의 노드를 찾을 수 없습니다.')
+		}
+
+		return updatedNode
+	} catch (error) {
+		throw error
+	}
+}
+
+
+/**
  * Node.position 을 doorNum 기준으로 일괄 업데이트 + 빌딩에 엑셀 파일명 저장
  * @param {Array} nodesPosition - [{ nodeNum, position }, ...]
  * @param {String} buildingId
@@ -325,4 +377,5 @@ module.exports = {
 	deleteNodeData,
 	setNodesPositionData,
 	handleNodeMqttMessage,
+	updateNodePositionData,
 }

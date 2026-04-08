@@ -237,6 +237,34 @@ doorNodeController.uploadXlsFile = async (req, res) => {
 }
 
 /**
+ * PATCH /api/nodes/position
+ * 특정 노드의 위치 정보를 수정합니다.
+ * - body: { doorNum: Number, position: String }
+ */
+doorNodeController.updateSingleNodePosition = async (req, res) => {
+	try {
+		logger('PATCH: updateSingleNodePosition')
+		const { doorNum, position } = req.body
+
+		if (!doorNum) {
+			return res.status(400).json({ state: 'fail', message: 'doorNum is required' })
+		}
+
+		// Service 호출 (아래 3번 단계에서 생성)
+		const result = await NodeService.updateNodePositionData(doorNum, position)
+
+		res.json({
+			state: 'success',
+			message: 'Position updated successfully',
+			node: result
+		})
+	} catch (error) {
+		logError(error.message)
+		res.status(500).json({ state: 'fail', message: error.message })
+	}
+}
+
+/**
  * POST /api/products/combine-nodes
  * 기존 게이트웨이에 일반 Node 들을 연결하는 컨트롤러입니다.
  * - body: { gateway_id, nodes:[ObjectId,...] }
