@@ -81,8 +81,8 @@ reportController.getTable1 = async (req, res) => {
 			: `${bname}_${kDateLabel(start)}~${kDateLabel(end)}_기간 보고서.hwpx`
 
 		// 3) 메모리에서 즉시 생성하여 바로 전송
-		const templatePath =
-			process.env.REPORT_TEMPLATE || './templates/report_template.hwpx'
+		const templatePath = resolveTemplatePath()
+
 		const buffer = fillHwpxZipStrictBuffer(templatePath, map)
 
 		res.attachment(outName) // Content-Disposition: attachment; filename=...
