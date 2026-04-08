@@ -10,6 +10,7 @@ const company_router = require('../modules/company/company.route')
 const weather_router = require('../modules/weather/weather.routes')
 const report_router = require('../modules/reports/report.route')
 const alert_router = require('../modules/alertion/alert.route')
+const fileRoutes = require('./file.routes')
 
 router.use('/auth', user_router)
 router.use('/node', node_router)
@@ -21,5 +22,5 @@ router.use('/company', company_router)
 router.use('/weather', weather_router)
 router.use('/report', report_router)
 router.use('/alert', alert_router)
-
+router.use('/file', fileRoutes)
 module.exports = router

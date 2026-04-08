@@ -1,46 +1,72 @@
-const fs = require('fs') // file system
-const fsPromises = require('fs').promises // file system
-const path = require('path')
+const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const { Upload } = require("@aws-sdk/lib-storage");
 
 class FileService {
-	save(file, uploadFolder) {
-		try {
-			// // ✅ Fayl nomini UTF-8 kodlashga o‘tkazish
-			const fileName = Buffer.from(file.name, 'latin1').toString('utf8')
-			const currentDir = __dirname // current direction
-			const staticDir = path.join(currentDir, '..', 'static', `${uploadFolder}`) // static direktoriya qilyapmiz
-			const filePath = path.join(staticDir, fileName) // Static papkani ichiga fileName (file) ni qo'shyapmiz
-			// console.log(fileName, filePath)
+    constructor() {
+        this.s3Client = new S3Client({
+            region: "us-east-1",
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
+        });
+        this.bucketName = "gssiot-image-bucket";
+    }
 
-			if (!fs.existsSync(staticDir)) {
-				fs.mkdirSync(staticDir, { recursive: true })
-			}
+    async save(file, uploadFolder) {
+        let key = "";
+        try {
+            // 한글 파일명 깨짐 방지 및 Key 설정
+            const fileName = Buffer.from(file.name, 'latin1').toString('utf8');
+            key = `${uploadFolder}/${fileName}`;
 
-			file.mv(filePath, () => console.log('Fayl saqlandi.'))
-			return fileName
-		} catch (error) {
-			throw new Error(`Error on saving file: ${error.message}`)
-		}
-	}
+            const upload = new Upload({
+                client: this.s3Client,
+                params: {
+                    Bucket: this.bucketName,
+                    Key: key,
+                    Body: file.data,
+                    ContentType: file.mimetype,
+                },
+            });
 
-	async delete(fileName) {
-		try {
-			const filePath = path.normalize(
-				path.join(__dirname, '../static/exels', fileName)
-			)
+            await upload.done();
+            console.log(`[S3 성공] 업로드 완료: ${key}`);
 
-			// Faylni o‘chirish
-			await fsPromises.unlink(filePath)
-			console.log(`${fileName} fayli o‘chirildi.`)
-		} catch (error) {
-			console.error(`Xatolik kodi: ${error.code}`)
-			if (error.code === 'ENOENT') {
-				return new Error(`Error on deleting file: File not found`)
-			} else {
-				return new Error(`Error in deleting file: ${error.message}`)
-			}
-		}
-	}
+            return key;
+        } catch (error) {
+            // 상세 로그 출력
+            console.error(`[S3 업로드 오류] 
+            - 파일명: ${file?.name}
+            - 저장경로: ${key}
+            - 에러내용: ${error.message}`);
+
+            throw new Error(`S3 저장 중 오류 발생: ${error.message}`);
+        }
+    }
+
+    async delete(fileKey) {
+        try {
+            if (!fileKey) {
+                throw new Error("삭제할 파일의 Key가 제공되지 않았습니다.");
+            }
+
+            const command = new DeleteObjectCommand({
+                Bucket: this.bucketName,
+                Key: fileKey,
+            });
+
+            await this.s3Client.send(command);
+            console.log(`[S3 성공] 삭제 완료: ${fileKey}`);
+        } catch (error) {
+            // 상세 로그 출력
+            console.error(`[S3 삭제 오류]
+            - 대상 Key: ${fileKey}
+            - 에러내용: ${error.message}`);
+
+            throw new Error(`S3 삭제 오류: ${error.message}`);
+        }
+    }
 }
 
-module.exports = new FileService()
+module.exports = new FileService();

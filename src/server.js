@@ -76,10 +76,10 @@ const graceful = async signal => {
 
 	try {
 		if (heartbeat?.stop) heartbeat.stop()
-	} catch {}
+	} catch { }
 	try {
 		if (weatherCronTask?.stop) weatherCronTask.stop()
-	} catch {}
+	} catch { }
 
 	// 1) HTTP serverni yopish
 	await new Promise(resolve => server.close(resolve))

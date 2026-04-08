@@ -8,7 +8,7 @@
 // const user_router = require('./routes/User.route')
 // const product_router = require('./routes/Product.route')
 // const company_router = require('./routes/compnay.route') // 기존 철자 유지
-
+// const fileRoutes = require('./routes/file.routes')
 // const angleCalibRoutes = require('./routes/angleCalibration.routes')
 // const alertLogRouter = require('./routes/alertLog.routes')
 // const weatherRoutes = require('./routes/weather.routes')
@@ -74,7 +74,7 @@
 
 // // weather
 // app.use('/weather', weatherRoutes)
-
+// app.use('/file', fileRoutes)
 // // reports
 // app.use('/reports', reportTable1Routes)
 // app.use('/reports', reportDailyRoutes)

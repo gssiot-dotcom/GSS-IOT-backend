@@ -5,7 +5,7 @@
 
 const ProductService = require('../services/product.service')
 const path = require('path')
-const AngleNodeHistory = require('../schema/Angle.node.history.model')
+const AngleNodeHistory = require('../modules/nodes/angle-node/angleNode.model')
 const { logger, logError } = require('../lib/logger')
 
 // controller 객체 생성

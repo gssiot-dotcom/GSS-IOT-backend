@@ -2,13 +2,13 @@
 // - DB(MongoDB)와 MQTT, 파일시스템을 직접 다루는 비즈니스 로직 계층입니다.
 // - 컨트롤러(product.controller.js)에서는 이 클래스를 호출해서 실제 작업을 수행합니다.
 
-const NodeSchema = require('../schema/Node.model')
-const NodeHistorySchema = require('../schema/History.model')
-const GatewaySchema = require('../schema/Gateway.model')
-const BuildingSchema = require('../schema/Building.model')
+const NodeSchema = require('../modules/nodes/door-node/node.model')
+const NodeHistorySchema = require('../modules/nodes/door-node/node.model')
+const GatewaySchema = require('../modules/gateways/gateway.model')
+const BuildingSchema = require('../modules/building/building.model')
 const { mqttClient, mqttEmitter } = require('./Mqtt.service')
 const fileService = require('./file.service')
-const AngleNodeSchema = require('../schema/Angle.node.model')
+const AngleNodeSchema = require('../modules/nodes/angle-node/angleNode.model')
 const fs = require('fs/promises')
 const path = require('path')
 const { logger, logError } = require('../lib/logger')

@@ -11,6 +11,8 @@
 	"license": "ISC",
 	"description": "",
 	"dependencies": {
+		"@aws-sdk/client-s3": "^3.1026.0",
+		"@aws-sdk/lib-storage": "^3.1026.0",
 		"adm-zip": "^0.5.16",
 		"assert": "^2.1.0",
 		"axios": "^1.7.9",
@@ -21,6 +23,7 @@
 		"dotenv": "^16.4.7",
 		"exceljs": "^4.4.0",
 		"express": "^4.19.2",
+		"express-fileupload": "^1.5.2",
 		"express-session": "^1.18.0",
 		"json2csv": "^6.0.0-alpha.2",
 		"jsonwebtoken": "^9.0.2",

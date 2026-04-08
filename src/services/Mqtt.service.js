@@ -1,14 +1,14 @@
 // services/Mqtt.service.js
 const mqtt = require('mqtt')
-const NodeHistorySchema = require('../schema/History.model')
-const NodeSchema = require('../schema/Node.model')
+const NodeHistorySchema = require('../modules/nodes/door-node/node.model')
+const NodeSchema = require('../modules/nodes/door-node/node.model')
 const EventEmitter = require('events')
 // const { notifyUsersOfOpenDoor } = require('../services/Telegrambot.service')
-const AngleNodeHistory = require('../schema/Angle.node.history.model')
-const AngleNodeSchema = require('../schema/Angle.node.model')
+const AngleNodeHistory = require('../modules/nodes/angle-node/angleNode.model')
+const AngleNodeSchema = require('../modules/nodes/angle-node/angleNode.model')
 const { logger, logError, logInfo } = require('../lib/logger')
-const GatewaySchema = require('../schema/Gateway.model')
-const AngleCalibration = require('../schema/Angle.Calibration.model') // ✅ 보정 테이블
+const GatewaySchema = require('../modules/gateways/gateway.model')
+const AngleCalibration = require('../modules/nodes/angle-node/angleNode.model')
 
 // 메시지를 다른 곳에 전달하기 위해 EventEmitter 사용
 const mqttEmitter = new EventEmitter()
