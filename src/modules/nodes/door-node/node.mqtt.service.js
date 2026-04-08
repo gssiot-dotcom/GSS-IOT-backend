@@ -482,49 +482,86 @@ async function downloadDetailedNodeLogData(buildingId, startDate, endDate) {
 /**
  * 현장 보고서 스타일의 Excel 생성
  */
+/**
+ * 데이터를 받아 현장 보고서 스타일의 Excel 버퍼를 생성하는 함수
+ * @param {Array} data - 엑셀 행 데이터 (건물명, 노드번호, 위치 등 포함)
+ * @param {Object} summary - 보고서 상단에 표시할 요약 정보
+ */
 async function createExcelFile(data, summary) {
 	const workbook = new ExcelJS.Workbook();
-	const worksheet = workbook.addWorksheet('현장 점검 보고서');
 
-	// 1. 요약 섹션 작성
+	// 1. 워크시트 생성 및 인쇄 설정 (한 페이지 너비 맞춤)
+	const worksheet = workbook.addWorksheet('현장 점검 보고서', {
+		pageSetup: {
+			paperSize: 9,           // A4 용지
+			orientation: 'landscape', // 가로 출력 (데이터가 많으므로 가로가 유리)
+			fitToPage: true,        // 페이지 맞춤 활성화
+			fitToWidth: 1,          // 너비를 1페이지에 고정 (3장 분할 방지)
+			fitToHeight: 0          // 높이는 데이터 양에 따라 자동으로 다음 페이지로
+		},
+		views: [{ state: 'frozen', ySplit: 4 }] // 상단 요약 및 헤더 고정
+	});
+
+	// 2. 보고서 타이틀 (A1~G1 병합)
 	worksheet.mergeCells('A1:G1');
 	const titleCell = worksheet.getCell('A1');
-	titleCell.value = `현장 안전 점검 보고서 (${summary.buildingName || '건물명 미지정'})`;
-	// createExcelFile 내부 요약 섹션 수정
+	titleCell.value = `현장 안전 점검 보고서 (${summary.buildingName})`;
+	titleCell.font = { name: '맑은 고딕', size: 18, bold: true, color: { argb: 'FF000000' } };
+	titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+	worksheet.getRow(1).height = 30;
+
+	// 3. 요약 섹션 (2~3행)
 	worksheet.addRow(['보고서 생성일', summary.reportDate, '', '조회 기간', summary.period]);
 	worksheet.addRow(['총 노드 수', `${summary.totalNodes}개`, '', '총 열림 횟수', `${summary.totalOpenCount}회`]);
-	titleCell.font = { name: '맑은 고딕', size: 16, bold: true };
-	titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
-	worksheet.addRow(['보고서 생성일', summary.reportDate, '', '총 노드 수', `${summary.totalNodes}개`, '총 열림 횟수', `${summary.totalOpenCount}회`]);
-	worksheet.getRow(2).font = { bold: true };
-	worksheet.addRow([]); // 빈 줄
+	// 요약 섹션 스타일링
+	[2, 3].forEach(rowNum => {
+		const row = worksheet.getRow(rowNum);
+		row.font = { name: '맑은 고딕', size: 10, bold: true };
+		row.eachCell(cell => {
+			cell.alignment = { vertical: 'middle' };
+		});
+	});
+	worksheet.addRow([]); // 빈 줄 추가
 
-	// 2. 헤더 설정
-	const headerRow = ['회사 이름', '노드 번호', '설치 위치', '게이트웨이', '상태', '열림 시각', '닫힘 시각', '지속 시간'];
-	worksheet.addRow(headerRow);
+	// 4. 데이터 헤더 설정
+	const headers = ['건물명', '노드 번호', '설치 위치', '게이트웨이', '상태', '열림 시각', '닫힘 시각', '지속 시간'];
+	worksheet.addRow(headers);
 
-	// 헤더 스타일링
-	const headerLine = worksheet.getRow(4);
-	headerLine.eachCell((cell) => {
+	// 헤더 행 스타일링 (5행)
+	const headerRow = worksheet.getRow(5);
+	headerRow.height = 20;
+	headerRow.eachCell((cell) => {
 		cell.fill = {
 			type: 'pattern',
 			pattern: 'solid',
-			fgColor: { argb: 'FFE0E0E0' }
+			fgColor: { argb: 'FFE0E0E0' } // 연회색 배경
 		};
-		cell.font = { bold: true };
+		cell.font = { name: '맑은 고딕', bold: true };
 		cell.border = {
 			top: { style: 'thin' },
 			left: { style: 'thin' },
 			bottom: { style: 'thin' },
 			right: { style: 'thin' }
 		};
-		cell.alignment = { horizontal: 'center' };
+		cell.alignment = { vertical: 'middle', horizontal: 'center' };
 	});
 
-	// 3. 데이터 추가
+	// 5. 데이터 행 추가
 	data.forEach(item => {
-		const row = worksheet.addRow(Object.values(item));
+		const rowValues = [
+			item['건물명'],
+			item['노드 번호'],
+			item['설치 위치'],
+			item['게이트웨이'],
+			item['상태'],
+			item['열림 시각'],
+			item['닫힘 시각'],
+			item['지속 시간']
+		];
+		const row = worksheet.addRow(rowValues);
+
+		// 데이터 행 테두리 및 정렬
 		row.eachCell((cell) => {
 			cell.border = {
 				top: { style: 'thin' },
@@ -532,18 +569,26 @@ async function createExcelFile(data, summary) {
 				bottom: { style: 'thin' },
 				right: { style: 'thin' }
 			};
-			cell.alignment = { horizontal: 'center' };
+			cell.alignment = { vertical: 'middle', horizontal: 'center' };
+			cell.font = { name: '맑은 고딕', size: 9 };
 		});
 	});
 
-	// 컬럼 너비 조절
-	worksheet.columns.forEach(column => {
-		column.width = 22;
-	});
+	// 6. 컬럼 너비 설정 (인쇄 시 잘리지 않도록 적절히 조절)
+	worksheet.columns = [
+		{ width: 15 }, // 건물명
+		{ width: 10 }, // 노드 번호
+		{ width: 20 }, // 설치 위치
+		{ width: 12 }, // 게이트웨이
+		{ width: 10 }, // 상태
+		{ width: 22 }, // 열림 시각
+		{ width: 22 }, // 닫힘 시각
+		{ width: 12 }  // 지속 시간
+	];
 
+	// 7. 엑셀 파일 쓰기
 	return await workbook.xlsx.writeBuffer();
 }
-
 module.exports = {
 	createNodesData,
 	getNodesData,
