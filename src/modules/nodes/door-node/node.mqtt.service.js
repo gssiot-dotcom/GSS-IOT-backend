@@ -7,6 +7,8 @@ const fileService = require('../../../services/file.service')
 const { AngleNode } = require('../angle-node/angleNode.model')
 const { VerticalNode } = require('../vertical-node/Vertical.node.model')
 
+const ExcelJS = require('exceljs');
+
 async function handleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	const now = new Date()
 	const timeString = now.toLocaleString('ko-KR', {
@@ -368,6 +370,180 @@ async function setNodesPositionData(nodesPosition, buildingId, file) {
 	}
 }
 
+/**
+ * 특정 빌딩 + 특정 기간의 노드 상세 열림/닫힘 로그 생성 (타임존 보정 및 보고서 형식)
+ * @param {String} buildingId - 빌딩의 MongoDB ObjectId
+ * @param {String} startDate - '2026-04-01' (KST 기준 시작일)
+ * @param {String} endDate   - '2026-04-08' (KST 기준 종료일)
+ */
+/**
+ * 특정 빌딩 + 특정 기간의 노드 상세 로그 생성 (건물명 컬럼 추가 버전)
+ */
+async function downloadDetailedNodeLogData(buildingId, startDate, endDate) {
+	try {
+		// 1. 빌딩 정보 조회 (이름 포함)
+		const building = await BuildingSchema.findById(buildingId);
+		if (!building) throw new Error('Building not found');
+
+		// DB 컬럼명이 building_name인지 확인 필요 (보통 building.name 또는 building.building_name)
+		const bName = building.building_name || building.name || '알 수 없음';
+
+		const buildingGateways = await GatewaySchema.find(
+			{ _id: { $in: building.gateway_sets } },
+			{ serial_number: 1, _id: 0 }
+		);
+		const serialNumbers = buildingGateways.map(gw => gw.serial_number);
+
+		// 2. 노드 위치 매핑
+		const allNodes = await Node.find({ gateway_id: { $in: building.gateway_sets } });
+		const nodeMap = {};
+		allNodes.forEach(n => {
+			nodeMap[n.doorNum] = n.position || '위치 미지정';
+		});
+
+		// 3. 날짜 필터 설정
+		const dateFilter = {
+			gw_number: { $in: serialNumbers }
+		};
+
+		if (startDate || endDate) {
+			dateFilter.createdAt = {};
+			if (startDate) {
+				const s = startDate.split('-').map(Number);
+				dateFilter.createdAt.$gte = new Date(s[0], s[1] - 1, s[2], 0, 0, 0, 0);
+			}
+			if (endDate) {
+				const e = endDate.split('-').map(Number);
+				dateFilter.createdAt.$lte = new Date(e[0], e[1] - 1, e[2], 23, 59, 59, 999);
+			}
+		}
+
+		const history = await NodesHistory.find(dateFilter).sort({ createdAt: 1 });
+		const reportData = [];
+		const activeSessions = {};
+		let totalOpenCount = 0;
+
+		// 4. 데이터 가공 (건물명 추가)
+		history.forEach(entry => {
+			const nodeKey = entry.doorNum;
+
+			if (entry.doorChk === 1) {
+				activeSessions[nodeKey] = entry.createdAt;
+				totalOpenCount++;
+			} else if (entry.doorChk === 0 && activeSessions[nodeKey]) {
+				const startTime = activeSessions[nodeKey];
+				const endTime = entry.createdAt;
+				const durationMs = new Date(endTime) - new Date(startTime);
+
+				reportData.push({
+					'건물명': bName, // 요청하신 건물명 컬럼 추가
+					'노드 번호': nodeKey,
+					'설치 위치': nodeMap[nodeKey] || '알 수 없음',
+					'게이트웨이': entry.gw_number,
+					'상태': '정상 종료',
+					'열림 시각': new Date(startTime).toLocaleString('ko-KR'),
+					'닫힘 시각': new Date(endTime).toLocaleString('ko-KR'),
+					'지속 시간': `${(durationMs / 1000).toFixed(1)}초`
+				});
+
+				delete activeSessions[nodeKey];
+			}
+		});
+
+		// 아직 열려있는 노드 처리
+		Object.keys(activeSessions).forEach(nodeKey => {
+			reportData.push({
+				'건물명': bName,
+				'노드 번호': Number(nodeKey),
+				'설치 위치': nodeMap[nodeKey] || '알 수 없음',
+				'게이트웨이': 'N/A',
+				'상태': '현재 열림',
+				'열림 시각': new Date(activeSessions[nodeKey]).toLocaleString('ko-KR'),
+				'닫힘 시각': '-',
+				'지속 시간': '-'
+			});
+		});
+
+		// 5. 요약 정보
+		const summary = {
+			buildingName: bName,
+			totalNodes: allNodes.length,
+			totalOpenCount: totalOpenCount,
+			period: startDate && endDate ? `${startDate} ~ ${endDate}` : '전체 기간',
+			reportDate: new Date().toLocaleString('ko-KR')
+		};
+
+		return await this.createExcelFile(reportData, summary);
+	} catch (error) {
+		logError('보고서 생성 실패: ' + error.message);
+		throw error;
+	}
+}
+/**
+ * 현장 보고서 스타일의 Excel 생성
+ */
+async function createExcelFile(data, summary) {
+	const workbook = new ExcelJS.Workbook();
+	const worksheet = workbook.addWorksheet('현장 점검 보고서');
+
+	// 1. 요약 섹션 작성
+	worksheet.mergeCells('A1:G1');
+	const titleCell = worksheet.getCell('A1');
+	titleCell.value = `현장 안전 점검 보고서 (${summary.buildingName || '건물명 미지정'})`;
+	// createExcelFile 내부 요약 섹션 수정
+	worksheet.addRow(['보고서 생성일', summary.reportDate, '', '조회 기간', summary.period]);
+	worksheet.addRow(['총 노드 수', `${summary.totalNodes}개`, '', '총 열림 횟수', `${summary.totalOpenCount}회`]);
+	titleCell.font = { name: '맑은 고딕', size: 16, bold: true };
+	titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+	worksheet.addRow(['보고서 생성일', summary.reportDate, '', '총 노드 수', `${summary.totalNodes}개`, '총 열림 횟수', `${summary.totalOpenCount}회`]);
+	worksheet.getRow(2).font = { bold: true };
+	worksheet.addRow([]); // 빈 줄
+
+	// 2. 헤더 설정
+	const headerRow = ['회사 이름', '노드 번호', '설치 위치', '게이트웨이', '상태', '열림 시각', '닫힘 시각', '지속 시간'];
+	worksheet.addRow(headerRow);
+
+	// 헤더 스타일링
+	const headerLine = worksheet.getRow(4);
+	headerLine.eachCell((cell) => {
+		cell.fill = {
+			type: 'pattern',
+			pattern: 'solid',
+			fgColor: { argb: 'FFE0E0E0' }
+		};
+		cell.font = { bold: true };
+		cell.border = {
+			top: { style: 'thin' },
+			left: { style: 'thin' },
+			bottom: { style: 'thin' },
+			right: { style: 'thin' }
+		};
+		cell.alignment = { horizontal: 'center' };
+	});
+
+	// 3. 데이터 추가
+	data.forEach(item => {
+		const row = worksheet.addRow(Object.values(item));
+		row.eachCell((cell) => {
+			cell.border = {
+				top: { style: 'thin' },
+				left: { style: 'thin' },
+				bottom: { style: 'thin' },
+				right: { style: 'thin' }
+			};
+			cell.alignment = { horizontal: 'center' };
+		});
+	});
+
+	// 컬럼 너비 조절
+	worksheet.columns.forEach(column => {
+		column.width = 22;
+	});
+
+	return await workbook.xlsx.writeBuffer();
+}
+
 module.exports = {
 	createNodesData,
 	getNodesData,
@@ -378,4 +554,6 @@ module.exports = {
 	setNodesPositionData,
 	handleNodeMqttMessage,
 	updateNodePositionData,
+	downloadDetailedNodeLogData,
+	createExcelFile,
 }

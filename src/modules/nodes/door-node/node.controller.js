@@ -286,3 +286,30 @@ doorNodeController.combineNodesToGateway = async (req, res) => {
 		res.json({ state: 'fail', message: error.message })
 	}
 }
+
+/**
+ * GET /api/nodes/report/detail?buildingId=...
+ * 노드별로 '언제 열렸고 언제 닫혔는지'에 대한 상세 로그를 엑셀로 추출
+ */
+doorNodeController.downloadDetailedReport = async (req, res) => {
+	try {
+		logger('request: downloadDetailedReport');
+		const { buildingId, startDate, endDate } = req.query; // 쿼리에서 날짜 추출
+
+		// 날짜 인자 추가 전달
+		const buffer = await NodeService.downloadDetailedNodeLogData(buildingId, startDate, endDate);
+
+		// 파일명에 날짜를 포함
+		const fileName = startDate && endDate
+			? `Node_report_${startDate}_to_${endDate}.xlsx`
+			: `node-detail-report.xlsx`;
+
+		res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+		res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+		res.status(200).send(buffer);
+	} catch (error) {
+		logError(error.message);
+		res.status(500).json({ state: 'fail', message: error.message });
+	}
+}

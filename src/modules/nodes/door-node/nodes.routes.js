@@ -22,5 +22,6 @@ nodesRouter.post(
 nodesRouter.post('/update-status', doorNodeController.updateNodeStatus)
 nodesRouter.delete('/delete', doorNodeController.deleteNode)
 nodesRouter.patch('/position', doorNodeController.updateSingleNodePosition)
+nodesRouter.get('/report/detail', doorNodeController.downloadDetailedReport)
 
 module.exports = nodesRouter
