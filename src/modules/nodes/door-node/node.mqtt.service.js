@@ -464,9 +464,12 @@ async function downloadDetailedNodeLogData(buildingId, startDate, endDate) {
 			});
 		});
 
-		// 5. 요약 정보
+		const bAddr = building.building_addr || building.address || '주소 정보 없음';
+
+		// 5. 요약 정보 (summary 객체에 building_addr 추가)
 		const summary = {
 			buildingName: bName,
+			building_addr: bAddr,      // 🔥 이 줄을 반드시 추가해야 엑셀에 출력됩니다.
 			totalNodes: allNodes.length,
 			totalOpenCount: totalOpenCount,
 			period: startDate && endDate ? `${startDate} ~ ${endDate}` : '전체 기간',
@@ -481,114 +484,360 @@ async function downloadDetailedNodeLogData(buildingId, startDate, endDate) {
 }
 /**
  * 현장 보고서 스타일의 Excel 생성
+ * - 설치 노드(DB 총 수) 및 조회 데이터 통계 포함
  */
 /**
- * 데이터를 받아 현장 보고서 스타일의 Excel 버퍼를 생성하는 함수
- * @param {Array} data - 엑셀 행 데이터 (건물명, 노드번호, 위치 등 포함)
- * @param {Object} summary - 보고서 상단에 표시할 요약 정보
+ * 현장 보고서 스타일의 Excel 생성 (전체 통합 버전)
+ * 구성: 타이틀/결재란 -> 기준정보 -> 통계 대시보드 -> 데이터 리스트 -> 현장 사진 -> 종합 평가/서명
  */
 async function createExcelFile(data, summary) {
 	const workbook = new ExcelJS.Workbook();
+	const now = new Date();
 
-	// 1. 워크시트 생성 및 인쇄 설정 (한 페이지 너비 맞춤)
-	const worksheet = workbook.addWorksheet('현장 점검 보고서', {
+	// 1. 기본 정보 및 통계 선언
+	const buildingAddr = summary.building_addr || "주소 정보 없음";
+	const buildingName = summary.buildingName || "현장명 미지정";
+
+	const stats = {
+		installed: summary.totalNodes || 0,
+		total: data.length,
+		정상: 0, 주의: 0, 경고: 0, 위험: 0, 미종료: 0
+	};
+
+	// 데이터 가공 및 등급 계산
+	const processedData = data.map(item => {
+		let durationSec = 0;
+		let isOpening = !item['닫힘 시각'] || item['닫힘 시각'] === '-';
+
+		if (isOpening) {
+			const openTime = new Date(item['열림 시각']);
+			durationSec = Math.floor((now - openTime) / 1000);
+			stats.미종료++;
+		} else {
+			durationSec = parseDurationToSeconds(item['지속 시간']);
+		}
+
+		let statusGrade = "";
+		let statusIcon = "";
+
+		if (isOpening) {
+			statusGrade = "미종료"; statusIcon = "🟣";
+		} else if (durationSec < 60) {
+			statusGrade = "정상"; stats.정상++;
+		} else if (durationSec < 180) {
+			statusGrade = "주의"; stats.주의++;
+		} else if (durationSec < 300) {
+			statusGrade = "경고"; stats.경고++;
+		} else {
+			statusGrade = "위험"; stats.위험++;
+		}
+
+		return { ...item, statusGrade, statusIcon, durationSec, isOpening };
+	});
+
+	// ---------------------------------------------------------
+	// 워크시트 생성 및 인쇄 설정 (열 기준 맞춤 핵심 부분)
+	// ---------------------------------------------------------
+	const worksheet = workbook.addWorksheet('안전점검보고서', {
 		pageSetup: {
-			paperSize: 9,           // A4 용지
-			orientation: 'landscape', // 가로 출력 (데이터가 많으므로 가로가 유리)
+			paperSize: 9,           // A4
+			orientation: 'landscape', // 가로 방향
 			fitToPage: true,        // 페이지 맞춤 활성화
-			fitToWidth: 1,          // 너비를 1페이지에 고정 (3장 분할 방지)
-			fitToHeight: 0          // 높이는 데이터 양에 따라 자동으로 다음 페이지로
-		},
-		views: [{ state: 'frozen', ySplit: 4 }] // 상단 요약 및 헤더 고정
+			fitToWidth: 1,          // 모든 열을 한 페이지 너비에 맞춤
+			fitToHeight: 0,         // 행(높이)은 데이터 양에 따라 자연스럽게 다음 페이지로 이동
+			margins: {              // 여백 최적화 (단위: inch)
+				left: 0.3, right: 0.3,
+				top: 0.3, bottom: 0.3,
+				header: 0.2, footer: 0.2
+			},
+			printTitlesRow: '10:10' // 페이지가 넘어가도 10행(헤더)은 매번 반복 출력
+		}
 	});
 
-	// 2. 보고서 타이틀 (A1~G1 병합)
-	worksheet.mergeCells('A1:G1');
+	// ---------------------------------------------------------
+	// 2. 타이틀 및 결재란 (1~3행)
+	// ---------------------------------------------------------
+	for (let i = 1; i <= 3; i++) worksheet.getRow(i).height = 28;
+
+	worksheet.mergeCells('A1:H3');
 	const titleCell = worksheet.getCell('A1');
-	titleCell.value = `현장 안전 점검 보고서 (${summary.buildingName})`;
-	titleCell.font = { name: '맑은 고딕', size: 18, bold: true, color: { argb: 'FF000000' } };
+	titleCell.value = "해 치 발 판 안 전 점 검 결 과 보 고 서";
+	titleCell.font = { size: 22, bold: true, name: '맑은 고딕' };
 	titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-	worksheet.getRow(1).height = 30;
+	titleCell.border = { bottom: { style: 'double' } };
 
-	// 3. 요약 섹션 (2~3행)
-	worksheet.addRow(['보고서 생성일', summary.reportDate, '', '조회 기간', summary.period]);
-	worksheet.addRow(['총 노드 수', `${summary.totalNodes}개`, '', '총 열림 횟수', `${summary.totalOpenCount}회`]);
+	const approvalCols = ['I', 'J', 'K'];
+	const labels = ['담 당', '검 토', '승 인'];
+	approvalCols.forEach((col, idx) => {
+		const lCell = worksheet.getCell(`${col}1`);
+		lCell.value = labels[idx];
+		lCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+		lCell.font = { bold: true, size: 10 };
+		lCell.alignment = { horizontal: 'center', vertical: 'middle' };
+		lCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } };
 
-	// 요약 섹션 스타일링
-	[2, 3].forEach(rowNum => {
-		const row = worksheet.getRow(rowNum);
-		row.font = { name: '맑은 고딕', size: 10, bold: true };
-		row.eachCell(cell => {
-			cell.alignment = { vertical: 'middle' };
-		});
-	});
-	worksheet.addRow([]); // 빈 줄 추가
-
-	// 4. 데이터 헤더 설정
-	const headers = ['건물명', '노드 번호', '설치 위치', '게이트웨이', '상태', '열림 시각', '닫힘 시각', '지속 시간'];
-	worksheet.addRow(headers);
-
-	// 헤더 행 스타일링 (5행)
-	const headerRow = worksheet.getRow(5);
-	headerRow.height = 20;
-	headerRow.eachCell((cell) => {
-		cell.fill = {
-			type: 'pattern',
-			pattern: 'solid',
-			fgColor: { argb: 'FFE0E0E0' } // 연회색 배경
-		};
-		cell.font = { name: '맑은 고딕', bold: true };
-		cell.border = {
-			top: { style: 'thin' },
-			left: { style: 'thin' },
-			bottom: { style: 'thin' },
-			right: { style: 'thin' }
-		};
-		cell.alignment = { vertical: 'middle', horizontal: 'center' };
+		worksheet.mergeCells(`${col}2:${col}3`);
+		worksheet.getCell(`${col}2`).border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } };
 	});
 
-	// 5. 데이터 행 추가
-	data.forEach(item => {
-		const rowValues = [
-			item['건물명'],
-			item['노드 번호'],
-			item['설치 위치'],
-			item['게이트웨이'],
-			item['상태'],
-			item['열림 시각'],
-			item['닫힘 시각'],
-			item['지속 시간']
-		];
-		const row = worksheet.addRow(rowValues);
+	// ---------------------------------------------------------
+	// 3. 기준 정보 표 (4~5행)
+	// ---------------------------------------------------------
+	worksheet.getRow(4).height = 22;
+	worksheet.getRow(5).height = 25;
 
-		// 데이터 행 테두리 및 정렬
-		row.eachCell((cell) => {
-			cell.border = {
-				top: { style: 'thin' },
-				left: { style: 'thin' },
-				bottom: { style: 'thin' },
-				right: { style: 'thin' }
-			};
-			cell.alignment = { vertical: 'middle', horizontal: 'center' };
-			cell.font = { name: '맑은 고딕', size: 9 };
-		});
-	});
-
-	// 6. 컬럼 너비 설정 (인쇄 시 잘리지 않도록 적절히 조절)
-	worksheet.columns = [
-		{ width: 15 }, // 건물명
-		{ width: 10 }, // 노드 번호
-		{ width: 20 }, // 설치 위치
-		{ width: 12 }, // 게이트웨이
-		{ width: 10 }, // 상태
-		{ width: 22 }, // 열림 시각
-		{ width: 22 }, // 닫힘 시각
-		{ width: 12 }  // 지속 시간
+	const infoTable = [
+		{ label: '작성 일시', value: summary.reportDate || now.toLocaleString(), startCol: 1, endCol: 3 },
+		{ label: '기준 현장명', value: buildingName, startCol: 4, endCol: 6 },
+		{ label: '기준지 위치', value: buildingAddr, startCol: 7, endCol: 11 }
 	];
 
-	// 7. 엑셀 파일 쓰기
+	infoTable.forEach(info => {
+		worksheet.mergeCells(4, info.startCol, 4, info.endCol);
+		const lCell = worksheet.getCell(4, info.startCol);
+		lCell.value = info.label;
+		lCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+		lCell.font = { bold: true, size: 10 };
+		lCell.alignment = { horizontal: 'center', vertical: 'middle' };
+		lCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } };
+
+		worksheet.mergeCells(5, info.startCol, 5, info.endCol);
+		const vCell = worksheet.getCell(5, info.startCol);
+		vCell.value = info.value;
+		vCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+		vCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } };
+	});
+
+	// ---------------------------------------------------------
+	// 4. 통계 대시보드 (7~8행)
+	// ---------------------------------------------------------
+	const statItems = [
+		{ label: '설치 노드', key: 'installed', color: '4472C4' },
+		{ label: '점검 건수', key: 'total', color: '5B9BD5' },
+		{ label: '위험 수준', key: '위험', color: 'C00000' },
+		{ label: '경고 수준', key: '경고', color: 'ED7D31' },
+		{ label: '주의/미종료', key: '미종료', color: '7030A0' }
+	];
+
+	statItems.forEach((s, i) => {
+		const colIdx = (i * 2) + 1;
+		worksheet.mergeCells(7, colIdx, 7, colIdx + 1);
+		const lCell = worksheet.getCell(7, colIdx);
+		lCell.value = s.label;
+		lCell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+		lCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: s.color } };
+		lCell.alignment = { horizontal: 'center' };
+
+		worksheet.mergeCells(8, colIdx, 8, colIdx + 1);
+		const vCell = worksheet.getCell(8, colIdx);
+		vCell.value = `${stats[s.key]} 건`;
+		vCell.font = { bold: true, size: 14 };
+		vCell.alignment = { horizontal: 'center' };
+		vCell.border = { bottom: { style: 'medium', color: { argb: s.color } } };
+	});
+	worksheet.getRow(8).height = 30;
+
+	// ---------------------------------------------------------
+	// 5. 상세 데이터 리스트 (10행~)
+	// ---------------------------------------------------------
+	const headerRow = worksheet.getRow(10);
+	headerRow.values = ['No.', '상태', '점검 위치', '지속 시간', '열림 시각', '닫힘 시각', '노드번호', '비고'];
+	headerRow.height = 30;
+	headerRow.eachCell(c => {
+		c.font = { bold: true, size: 11 };
+		c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+		c.alignment = { horizontal: 'center', vertical: 'middle' };
+		c.border = { top: { style: 'medium' }, bottom: { style: 'medium' } };
+	});
+
+	processedData.forEach((item, index) => {
+		const row = worksheet.addRow([
+			index + 1,
+			`${item.statusIcon} ${item.statusGrade}`,
+			item['설치 위치'],
+			item.isOpening ? `진행중` : item['지속 시간'],
+			item['열림 시각'],
+			item.isOpening ? '-' : item['닫힘 시각'],
+			item['노드 번호'],
+			''
+		]);
+		row.height = 26;
+		row.eachCell((cell, colNum) => {
+			cell.alignment = { horizontal: 'center', vertical: 'middle' };
+			cell.border = { bottom: { style: 'thin', color: { argb: 'FFD9D9D9' } } };
+			if (colNum === 2 && item.statusGrade === '위험') {
+				cell.font = { bold: true, color: { argb: 'FFC00000' } };
+			}
+		});
+	});
+
+	// ---------------------------------------------------------
+	// 6. 현장 사진 및 이미지 (데이터 종료 후 하단)
+	// ---------------------------------------------------------
+	let currentRow = 10 + processedData.length + 2;
+	worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+	const photoTitle = worksheet.getCell(`A${currentRow}`);
+	photoTitle.value = "현장 사진 및 이미지";
+	photoTitle.font = { bold: true, size: 12 };
+	photoTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+	currentRow++;
+
+	const photoHeaders = [
+		{ label: "위험 감지 후 조치 전 현장", start: 1, end: 4 },
+		{ label: "안전 조치 후 현장", start: 6, end: 10 }
+	];
+	photoHeaders.forEach(h => {
+		worksheet.mergeCells(currentRow, h.start, currentRow, h.end);
+		const cell = worksheet.getCell(currentRow, h.start);
+		cell.value = h.label;
+		cell.alignment = { horizontal: 'center' };
+		cell.font = { bold: true };
+		cell.border = { outline: true, top: { style: 'thin' }, bottom: { style: 'thin' } };
+	});
+	currentRow++;
+
+	worksheet.getRow(currentRow).height = 150;
+	worksheet.mergeCells(currentRow, 1, currentRow, 4);
+	worksheet.mergeCells(currentRow, 6, currentRow, 10);
+	worksheet.getCell(currentRow, 1).value = "\n\n(이미지 첨부)";
+	worksheet.getCell(currentRow, 6).value = "\n\n(이미지 첨부)"; // 기존 7열에서 6열로 수정
+	[1, 6].forEach(c => {
+		worksheet.getCell(currentRow, c).alignment = { horizontal: 'center', vertical: 'middle' };
+		worksheet.getCell(currentRow, c).border = { outline: true, left: { style: 'thin' }, right: { style: 'thin' } };
+	});
+	currentRow++;
+
+	["구역명", "내용"].forEach(label => {
+		worksheet.getRow(currentRow).height = 25;
+		worksheet.getCell(currentRow, 1).value = label;
+		worksheet.getCell(currentRow, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+		worksheet.mergeCells(currentRow, 2, currentRow, 4);
+
+		worksheet.getCell(currentRow, 6).value = label;
+		worksheet.getCell(currentRow, 6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+		worksheet.mergeCells(currentRow, 7, currentRow, 10);
+
+		const activeCols = [1, 2, 3, 4, 6, 7, 8, 9, 10];
+		activeCols.forEach(col => {
+			const cell = worksheet.getCell(currentRow, col);
+			cell.alignment = { horizontal: 'center', vertical: 'middle' };
+			cell.border = {
+				top: { style: 'thin' }, bottom: { style: 'thin' },
+				left: { style: 'thin' }, right: { style: 'thin' }
+			};
+		});
+		currentRow++;
+	});
+	currentRow += 1;
+
+	// ---------------------------------------------------------
+	// 7. 종합 평가 및 서명란
+	// ---------------------------------------------------------
+	worksheet.mergeCells(`A${currentRow}:K${currentRow}`);
+	const evalTitle = worksheet.getCell(`A${currentRow}`);
+	evalTitle.value = " 종합 평가";
+	evalTitle.font = { bold: true, size: 12 };
+	evalTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+	currentRow++;
+
+	worksheet.mergeCells(currentRow, 1, currentRow + 4, 2);
+	const evalLabel = worksheet.getCell(currentRow, 1);
+	evalLabel.value = "종합 평가\n\n(조치 내용 및\n점검 분석)";
+	evalLabel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+	evalLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+
+	worksheet.mergeCells(currentRow, 3, currentRow, 11);
+	worksheet.getCell(currentRow, 3).value = "  □ 안전 (정상)      □ 주의 (관찰 필요)      □ 위험 (즉시 조치)";
+	worksheet.getCell(currentRow, 3).alignment = { vertical: 'middle' };
+
+	worksheet.mergeCells(currentRow + 1, 3, currentRow + 4, 11);
+	worksheet.getCell(currentRow + 1, 3).value = " [점검자 의견]: ";
+	worksheet.getCell(currentRow + 1, 3).alignment = { vertical: 'top', wrapText: true };
+
+	for (let r = currentRow; r <= currentRow + 4; r++) {
+		for (let c = 1; c <= 11; c++) {
+			worksheet.getCell(r, c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+		}
+	}
+	currentRow += 6;
+
+	const signLabels = [
+		{ label: "보 고 자", name: "이 름:", opinion: "보고자 의견:" },
+		{ label: "검 토 자", name: "이 름:", opinion: "검토자 의견:" }
+	];
+	signLabels.forEach((s, idx) => {
+		const startCol = idx === 0 ? 1 : 7;
+		worksheet.getCell(currentRow, startCol).value = s.label;
+		worksheet.getCell(currentRow, startCol).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+		worksheet.mergeCells(currentRow, startCol + 1, currentRow, startCol + 4);
+		worksheet.getCell(currentRow, startCol + 1).value = `${s.name}                (서명/인)`;
+
+		worksheet.mergeCells(currentRow + 1, startCol, currentRow + 2, startCol + 4);
+		worksheet.getCell(currentRow + 1, startCol).value = s.opinion;
+		worksheet.getCell(currentRow + 1, startCol).alignment = { vertical: 'top' };
+
+		for (let r = currentRow; r <= currentRow + 2; r++) {
+			for (let c = startCol; c <= startCol + 4; c++) {
+				worksheet.getCell(r, c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+			}
+		}
+	});
+
+	// 컬럼 너비 최종 조정
+	worksheet.columns = [
+		{ width: 8 }, { width: 14 }, { width: 30 }, { width: 15 },
+		{ width: 22 }, { width: 22 }, { width: 12 }, { width: 15 },
+		{ width: 9 }, { width: 9 }, { width: 9 }
+	];
+
 	return await workbook.xlsx.writeBuffer();
 }
+
+/** 보조 함수들 **/
+function parseDurationToSeconds(duration) {
+	if (!duration) return 0;
+	const str = String(duration);
+	if (str.includes(':')) {
+		const p = str.split(':').map(Number);
+		return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1];
+	}
+	return parseFloat(str.replace(/[^0-9.]/g, '')) || 0;
+}
+
+function formatSeconds(sec) {
+	const h = Math.floor(sec / 3600).toString().padStart(2, '0');
+	const m = Math.floor((sec % 3600) / 60).toString().padStart(2, '0');
+	const s = (sec % 60).toString().padStart(2, '0');
+	return `${h}:${m}:${s}`;
+}
+
+const NodeService = {
+	/**
+	 * 특정 노드의 위치 정보를 업데이트합니다.
+	 */
+	updateSingleNodePosition: async (nodeNum, position) => {
+		try {
+			// 1. DB 업데이트 로직 (프로젝트에서 사용하는 DB 라이브러리에 맞춰 수정하세요)
+			// 예: const result = await db.nodes.update({ where: { nodeNum }, data: { position } });
+
+			// 임시 로직 예시 (DB 연동 부분):
+			// const [result] = await pool.query(
+			//     'UPDATE nodes SET position = ? WHERE node_num = ?',
+			//     [position, nodeNum]
+			// );
+
+			// 2. 업데이트 결과 처리 (영향을 받은 행이 있는지 체크)
+			// if (result.affectedRows === 0) {
+			//     return { state: 'fail', message: '해당 노드를 찾을 수 없습니다.' };
+			// }
+
+			return { state: 'success' };
+		} catch (error) {
+			console.error('Service Error:', error);
+			return { state: 'fail', message: '데이터베이스 업데이트 중 오류가 발생했습니다.' };
+		}
+	}
+};
 module.exports = {
 	createNodesData,
 	getNodesData,
@@ -601,4 +850,5 @@ module.exports = {
 	updateNodePositionData,
 	downloadDetailedNodeLogData,
 	createExcelFile,
+
 }
