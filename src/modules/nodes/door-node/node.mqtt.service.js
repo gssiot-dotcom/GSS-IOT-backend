@@ -469,7 +469,7 @@ async function downloadDetailedNodeLogData(buildingId, startDate, endDate) {
 		// 5. 요약 정보 (summary 객체에 building_addr 추가)
 		const summary = {
 			buildingName: bName,
-			building_addr: bAddr,      // 🔥 이 줄을 반드시 추가해야 엑셀에 출력됩니다.
+			building_addr: bAddr,      // addr 선언
 			totalNodes: allNodes.length,
 			totalOpenCount: totalOpenCount,
 			period: startDate && endDate ? `${startDate} ~ ${endDate}` : '전체 기간',
@@ -587,9 +587,10 @@ async function createExcelFile(data, summary) {
 	worksheet.getRow(5).height = 25;
 
 	const infoTable = [
-		{ label: '작성 일시', value: summary.reportDate || now.toLocaleString(), startCol: 1, endCol: 3 },
-		{ label: '기준 현장명', value: buildingName, startCol: 4, endCol: 6 },
-		{ label: '기준지 위치', value: buildingAddr, startCol: 7, endCol: 11 }
+		{ label: '작성 일시', value: summary.reportDate, startCol: 1, endCol: 3 },
+		{ label: '조회 기간', value: summary.period, startCol: 4, endCol: 5 },
+		{ label: '기준 현장명', value: summary.buildingName, startCol: 6, endCol: 8 },
+		{ label: '기준지 위치', value: summary.building_addr, startCol: 9, endCol: 11 }
 	];
 
 	infoTable.forEach(info => {
