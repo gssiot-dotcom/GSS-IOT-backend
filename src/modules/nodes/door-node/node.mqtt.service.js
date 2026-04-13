@@ -641,8 +641,8 @@ async function createExcelFile(data, summary) {
 	// ---------------------------------------------------------
 	// 5. 상세 데이터 리스트 (10행~)
 	// ---------------------------------------------------------
-	const headerRow = worksheet.getRow(10);
-	headerRow.values = ['No.', '상태', '점검 위치', '지속 시간', '열림 시각', '닫힘 시각', '노드번호', '비고'];
+	const headerRow = worksheet.getRow(11);
+	headerRow.values = ['No.', '상태', '점검 위치', '지속 시간', '열림 시각', '닫힘 시각', '노드번호', '', '비고', '', ''];
 	headerRow.height = 30;
 	headerRow.eachCell(c => {
 		c.font = { bold: true, size: 11 };
@@ -660,8 +660,19 @@ async function createExcelFile(data, summary) {
 			item['열림 시각'],
 			item.isOpening ? '-' : item['닫힘 시각'],
 			item['노드 번호'],
-			''
+			'', // 비고 내용이 들어갈 시작점 (H열)
+			'', // I열
+			'', // J열
+			''  // K열
 		]);
+		// 현재 추가된 행의 번호를 가져옵니다.
+		const currentRowNum = row.number;
+
+		// H열(8)부터 K열(11)까지 병합 (예: "H5:K5")
+		worksheet.mergeCells(`H${currentRowNum}:K${currentRowNum}`);
+
+		// 필요하다면 병합된 셀의 스타일 설정 (예: 가운데 정렬)
+		row.getCell(8).alignment = { vertical: 'middle', horizontal: 'center' };
 		row.height = 26;
 		row.eachCell((cell, colNum) => {
 			cell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -747,16 +758,16 @@ async function createExcelFile(data, summary) {
 	evalLabel.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 	evalLabel.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
 
-	worksheet.mergeCells(currentRow, 3, currentRow, 11);
+	worksheet.mergeCells(currentRow, 3, currentRow, 10);
 	worksheet.getCell(currentRow, 3).value = "  □ 안전 (정상)      □ 주의 (관찰 필요)      □ 위험 (즉시 조치)";
 	worksheet.getCell(currentRow, 3).alignment = { vertical: 'middle' };
 
-	worksheet.mergeCells(currentRow + 1, 3, currentRow + 4, 11);
+	worksheet.mergeCells(currentRow + 1, 3, currentRow + 4, 10);
 	worksheet.getCell(currentRow + 1, 3).value = " [점검자 의견]: ";
 	worksheet.getCell(currentRow + 1, 3).alignment = { vertical: 'top', wrapText: true };
 
 	for (let r = currentRow; r <= currentRow + 4; r++) {
-		for (let c = 1; c <= 11; c++) {
+		for (let c = 1; c <= 10; c++) {
 			worksheet.getCell(r, c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
 		}
 	}
@@ -767,7 +778,7 @@ async function createExcelFile(data, summary) {
 		{ label: "검 토 자", name: "이 름:", opinion: "검토자 의견:" }
 	];
 	signLabels.forEach((s, idx) => {
-		const startCol = idx === 0 ? 1 : 7;
+		const startCol = idx === 0 ? 1 : 6;
 		worksheet.getCell(currentRow, startCol).value = s.label;
 		worksheet.getCell(currentRow, startCol).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
 		worksheet.mergeCells(currentRow, startCol + 1, currentRow, startCol + 4);
