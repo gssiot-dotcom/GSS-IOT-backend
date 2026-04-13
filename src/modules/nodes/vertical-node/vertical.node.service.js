@@ -1,6 +1,68 @@
 const { VerticalNode, VerticalNodeHistory } = require('./Vertical.node.model')
 const GatewaySchema = require('../../gateways/gateway.model')
 const BuildingSchema = require('../../building/building.model')
+const { eventBus } = require('../../../shared/eventBus')
+const { logger } = require('../../../lib/logger')
+
+const handleVerticalNodeMqttMessage = async ({ data, gatewayNumberLast4 }) => {
+	const now = new Date()
+	const timeString = now.toLocaleString('ko-KR', {
+		timeZone: 'Asia/Seoul',
+		hour12: false,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+	})
+
+	logger('Vertical-Node mqtt message:', data, '|', timeString)
+
+	const eventData = {
+		gw_number: gatewayNumberLast4,
+		node_number: data.doorNum,
+		angle_x: data.angle_x,
+		angle_y: data.angle_y,
+	}
+
+	const updateData = {
+		angle_x: data.angle_x,
+		angle_y: data.angle_y,
+	}
+
+	const buildingId = await GatewaySchema.findOne({
+		serial_number: gatewayNumberLast4,
+	}).then(gateway => gateway?.building_id)
+
+	const realTimeData = {
+		buildingId: buildingId?.toString(),
+		gw_number: gatewayNumberLast4,
+		node_number: data.doorNum,
+		angle_x: data.angle_x,
+		angle_y: data.angle_y,
+	}
+
+	// 🔥 endi mqttEmitter emas, eventBus:
+	eventBus.emit('rt.vertical', realTimeData)
+
+	const updatedNode = await VerticalNode.findOneAndUpdate(
+		{ node_number: data.doorNum },
+		{ $set: updateData },
+		{ new: true },
+	)
+
+	if (!updatedNode) {
+		logInfo('Node를 찾을 수 없음:', data.doorNum)
+		return
+	}
+
+	try {
+		await new VerticalNodeHistory(eventData).save()
+	} catch (err) {
+		logError('VerticalNodesHistory 저장 오류:', err.message)
+		return
+	}
+}
 
 class VerticalNodeService {
 	constructor() {
@@ -19,6 +81,54 @@ class VerticalNodeService {
 	 * 1. doorNum 기준 중복 체크
 	 * 2. 중복이 없으면 doorNum만 뽑아서 문서 생성(나머지 필드는 기본값)
 	 */
+
+	async handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 }) {
+		const now = new Date()
+		const timeString = now.toLocaleString('ko-KR', {
+			timeZone: 'Asia/Seoul',
+			hour12: false,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+		})
+
+		logger('Door-Node mqtt message:', data, '|', timeString)
+
+		const eventData = {
+			gw_number: gatewayNumberLast4,
+			node_number: data.doorNum,
+			angle_x: data.angle_x,
+			angle_y: data.angle_y,
+		}
+
+		const updateData = {
+			angle_x: data.angle_x,
+			angle_y: data.angle_y,
+		}
+
+		const updatedNode = await this.verticalNodeHistorySchema.findOneAndUpdate(
+			{ node_number: data.doorNum },
+			{ $set: updateData },
+			{ new: true },
+		)
+
+		if (!updatedNode) {
+			logInfo('Node를 찾을 수 없음:', data.doorNum)
+			return
+		}
+		// 🔥 endi mqttEmitter emas, eventBus:
+		eventBus.emit('rt.vertical', updatedNode)
+
+		try {
+			await new this.verticalNodeHistorySchema(eventData).save()
+		} catch (err) {
+			logError('VerticalNodesHistory 저장 오류:', err.message)
+			return
+		}
+	}
+
 	async createVerticalNodesData(arrayData) {
 		try {
 			// 이미 존재하는 node_number 이 있는지 확인
@@ -93,4 +203,4 @@ class VerticalNodeService {
 	}
 }
 
-module.exports = VerticalNodeService
+module.exports = { VerticalNodeService, handleVerticalNodeMqttMessage }

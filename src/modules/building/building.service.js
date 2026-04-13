@@ -190,12 +190,12 @@ class BuildingService {
 
 			const gatewayIds = gateways.map(gateway => gateway._id)
 
-			const verticalNodes = await this.angleNodeSchema
+			const verticalNodes = await this.verticalNodeSchema
 				.find({
 					gateway_id: { $in: gatewayIds },
 				})
 				.populate('gateway_id', 'serial_number')
-				.sort({ doorNum: 1 })
+				.sort({ node_number: 1 })
 
 			const building = await this.buildingSchema.findOne({ _id: buildingId })
 
@@ -206,7 +206,7 @@ class BuildingService {
 				throw new Error('No nodes found for this building')
 			}
 
-			return { building, gateways, verticalNodes }
+			return { building, verticalNodes }
 		} catch (error) {
 			// Errorni ushlash
 			console.error('Error on getBuildingNodesData:', error.message)

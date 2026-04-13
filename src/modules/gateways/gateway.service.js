@@ -9,6 +9,7 @@ const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
 
 // ------------------------- Additional functions ------------------------------- //
 async function publishAsync(client, topic, payload) {
+	console.log('Publishing to MQTT:', { topic, payload })
 	return new Promise((resolve, reject) => {
 		client.publish(topic, JSON.stringify(payload), err => {
 			if (err) reject(err)
@@ -26,6 +27,7 @@ function waitForGatewayResponse({ gw_number, timeoutMs = 10000 }) {
 
 		const handler = payload => {
 			// payload: { gatewayNumberLast4, data }
+			console.log('Received MQTT response:', payload)
 			if (String(payload?.gw_number) !== String(gw_number)) return
 
 			cleanup()
@@ -274,6 +276,8 @@ async function combineVerticalNodesToGateway(data) {
 			{ _id: 1 },
 		).lean()
 
+		console.log('Found vertical nodes for combining:', foundNewNodes)
+
 		if (foundNewNodes.length !== nodesId.length) {
 			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
 			const missing = nodesId.filter(id => !foundSet.has(String(id)))
@@ -291,7 +295,7 @@ async function combineVerticalNodesToGateway(data) {
 		// 4) doorNum larni olish (old + new)
 		const nodes = await VerticalNode.find(
 			{ _id: { $in: allUniqueIds } },
-			{ doorNum: 1, _id: 0 },
+			{ node_number: 1, _id: 0 },
 		).lean()
 
 		if (!nodes.length) {
@@ -306,7 +310,7 @@ async function combineVerticalNodesToGateway(data) {
 			cmd: 2,
 			nodeType: 2,
 			numNodes: nodes.length,
-			nodes: nodes.map(n => n.doorNum),
+			nodes: nodes.map(n => n.node_number),
 		}
 
 		const mqttClient = getMqttClient()
