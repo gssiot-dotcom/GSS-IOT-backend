@@ -11,7 +11,7 @@
 	"license": "ISC",
 	"description": "",
 	"dependencies": {
-		"@aws-sdk/client-s3": "^3.1026.0",
+		"@aws-sdk/client-s3": "^3.1029.0",
 		"@aws-sdk/lib-storage": "^3.1026.0",
 		"adm-zip": "^0.5.16",
 		"assert": "^2.1.0",

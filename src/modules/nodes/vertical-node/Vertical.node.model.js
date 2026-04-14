@@ -16,7 +16,7 @@ const VerticalSchema = new Schema(
 		position: { type: String, default: '' },
 		floor: { type: String, default: '' },
 	},
-	{ timestamps: true }
+	{ timestamps: true },
 )
 
 // agar yuqorida index: true yozmasang
@@ -32,7 +32,7 @@ const VerticalNodeHistorySchema = new Schema(
 		angle_y: { type: Number, required: true },
 		gw_number: { type: Number, required: true },
 	},
-	{ timestamps: true }
+	{ timestamps: true },
 )
 
 const VerticalNodeAlertLogSchema = new Schema({
@@ -46,12 +46,12 @@ const VerticalNodeAlertLogSchema = new Schema({
 
 const VerticalNodeAlertLog = mongoose.model(
 	'VerticalNodeAlertLog',
-	VerticalNodeAlertLogSchema
+	VerticalNodeAlertLogSchema,
 )
 
 const VerticalNodeHistory = mongoose.model(
 	'VerticalNodeHistory',
-	VerticalNodeHistorySchema
+	VerticalNodeHistorySchema,
 )
 
 module.exports = { VerticalNode, VerticalNodeHistory, VerticalNodeAlertLog }

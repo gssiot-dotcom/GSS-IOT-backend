@@ -9,6 +9,9 @@ const {
 	handleAngleNodeMqttMessage,
 } = require('../../modules/nodes/angle-node/angleNode.mqtt.service')
 const { ConcurrencyQueue } = require('../../utils/ConcurrencyQueue')
+const {
+	handleVerticalNodeMqttMessage,
+} = require('../../modules/nodes/vertical-node/vertical.node.service')
 
 // export qilish kerak bo‘lsa:
 let mqttClient
@@ -46,6 +49,7 @@ function initMqtt() {
 	})
 
 	mqttClient.on('message', (topic, buf) => {
+		logger('data:', topic, buf.toString())
 		const data = safeJsonParse(buf)
 		if (!data) {
 			logError('MQTT JSON parse error')
@@ -70,6 +74,9 @@ function initMqtt() {
 							gatewayNumberLast4,
 						})
 						return
+					}
+					if (topic.startsWith(topics.formPrefix)) {
+						await handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 })
 					}
 					if (topic.startsWith(topics.gwResPrefix)) {
 						const { eventBus } = require('../../shared/eventBus')

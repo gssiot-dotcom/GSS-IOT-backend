@@ -27,6 +27,7 @@ function initSocket(serverIo) {
 	})
 
 	eventBus.on('rt.vertical', payload => {
+		console.log('rt.vertical event received:', payload)
 		if (!payload?.buildingId) return
 		const room = getRoomName(payload.buildingId, 'vertical')
 		io.to(room).emit('realtime-data', payload)
