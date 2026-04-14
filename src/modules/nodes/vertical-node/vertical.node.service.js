@@ -201,6 +201,27 @@ class VerticalNodeService {
 			throw new Error(`Error: ${error.message}`)
 		}
 	}
+
+	async updateLocation(node_number, position, floor) {
+	try {
+		const updatedNode = await this.verticalNodeSchema.findOneAndUpdate(
+			{ node_number: Number(node_number) },
+			{
+				position,
+				floor,
+			},
+			{ new: true },
+		)
+
+		if (!updatedNode) {
+			throw new Error('Not Found')
+		}
+
+		return updatedNode
+	} catch (error) {
+		throw new Error(`Error: ${error.message}`)
+	}
+}
 }
 
 module.exports = { VerticalNodeService, handleVerticalNodeMqttMessage }

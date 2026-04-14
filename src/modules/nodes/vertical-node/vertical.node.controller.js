@@ -172,23 +172,21 @@ verticalNodeController.verticalNodeGraphicData = async (req, res) => {
 verticalNodeController.updateLocation = async (req, res) => {
 	try {
 		const { node_number } = req.params
+		const { position, floor } = req.body
 
-		const updatedNode = await VerticalNode.findOneAndUpdate(
-			{ node_number: Number(node_number) },
-			{
-				position: req.body.position,
-				floor: req.body.floor,
-			},
-			{ new: true },
+		const verticalNodeService = new VerticalNodeService()
+		const updatedNode = await verticalNodeService.updateLocation(
+			node_number,
+			position,
+			floor,
 		)
-
-		if (!updatedNode) {
-			return res.status(404).json({ message: 'Not Found' })
-		}
 
 		res.status(200).json({ success: true, data: updatedNode })
 	} catch (error) {
 		console.error('updateLocation error:', error)
+		if (error.message.includes('Not Found')) {
+			return res.status(404).json({ success: false, message: 'Not Found' })
+		}
 		res.status(500).json({ success: false, error: error.message })
 	}
 }
