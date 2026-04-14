@@ -13,6 +13,8 @@ const VerticalSchema = new Schema(
 			// index: true, // yoki pastda alohida index
 		},
 		node_status: { type: Boolean, default: true },
+		position: { type: String, default: '' },
+		floor: { type: String, default: '' },
 	},
 	{ timestamps: true }
 )

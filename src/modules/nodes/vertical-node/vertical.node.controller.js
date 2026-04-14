@@ -166,4 +166,21 @@ verticalNodeController.verticalNodeGraphicData = async (req, res) => {
 		console.error('Error fetching verticalNodeGraphicData:', err)
 		res.status(500).json({ message: 'Server error' })
 	}
-}
+};
+
+
+// 위치 정보 업데이트
+verticalNodeController.updateLocation = async (req, res) => {
+	try {
+		const { node_number } = req.params;
+		const updatedNode = await Vertical.findOneAndUpdate(
+			{ node_number },
+			{ position: req.body.position, floor: req.body.floor },
+			{ new: true }
+		);
+		if (!updatedNode) return res.status(404).json({ message: "Not Found" });
+		res.status(200).json({ success: true, data: updatedNode });
+	} catch (error) {
+		res.status(500).json({ success: false, error: error.message });
+	}
+};

@@ -28,4 +28,8 @@ verticalNodeRouter.patch(
 	verticalNodeController.updateVerticalNodeStatus,
 )
 
+// 라우터와 컨트롤러 함수 연결
+
+verticalNodeRouter.patch('/verticalnode/:node_number', verticalNodeController.updateLocation);
+
 module.exports = verticalNodeRouter
