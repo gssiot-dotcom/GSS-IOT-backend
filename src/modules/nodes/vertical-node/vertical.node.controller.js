@@ -1,6 +1,6 @@
 const { VerticalNodeService } = require('./vertical.node.service')
 const { logger, logError } = require('../../../lib/logger')
-const { VerticalNodeHistory } = require('./Vertical.node.model')
+const { VerticalNode, VerticalNodeHistory } = require('./Vertical.node.model')
 const GatewayServie = require('../../gateways/gateway.service')
 
 // controller 객체 생성
@@ -172,14 +172,23 @@ verticalNodeController.verticalNodeGraphicData = async (req, res) => {
 verticalNodeController.updateLocation = async (req, res) => {
 	try {
 		const { node_number } = req.params
-		const updatedNode = await Vertical.findOneAndUpdate(
-			{ node_number },
-			{ position: req.body.position, floor: req.body.floor },
+
+		const updatedNode = await VerticalNode.findOneAndUpdate(
+			{ node_number: Number(node_number) },
+			{
+				position: req.body.position,
+				floor: req.body.floor,
+			},
 			{ new: true },
 		)
-		if (!updatedNode) return res.status(404).json({ message: 'Not Found' })
+
+		if (!updatedNode) {
+			return res.status(404).json({ message: 'Not Found' })
+		}
+
 		res.status(200).json({ success: true, data: updatedNode })
 	} catch (error) {
+		console.error('updateLocation error:', error)
 		res.status(500).json({ success: false, error: error.message })
 	}
 }
