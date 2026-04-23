@@ -1,79 +1,46 @@
 const mongoose = require('mongoose')
-const { gateway_type_enums } = require('../../lib/config')
+const { gateway_type_enums, GATEWAY_TYPES } = require('../../lib/config')
 
-const gatewaySchema = new mongoose.Schema({
-	serial_number: {
-		type: String,
-		required: true,
-		index: { unique: true, sparse: true },
-	},
-	nodes: {
-		type: [
-			{
-				type: mongoose.Schema.ObjectId,
-				ref: 'Node',
-			},
-		],
-		default: [],
-		// validate: {
-		// 	validator: function (nodesArray) {
-		// 		return nodesArray.length > 0 // Ensure array is not empty
-		// 	},
-		// 	message: 'At least one node must be present in the nodes array',
-		// },
-	},
-	angle_nodes: {
-		type: [
-			{
-				type: mongoose.Schema.ObjectId,
-				ref: 'Angle-Node',
-			},
-		],
-		required: false,
-		default: [],
-	},
-	vertical_nodes: {
-		type: [
-			{
-				type: mongoose.Schema.ObjectId,
-				ref: 'Vertical-Node',
-			},
-		],
-		required: false,
-		default: [],
-	},
-	gateway_status: {
-		type: Boolean,
-		required: false,
-		default: true,
-	},
-	gateway_type: {
-		type: String,
-		required: [true, 'Gateway type is required'],
-		default: 'GATEWAY',
-		enum: {
-			values: gateway_type_enums,
-			message: '{VALUE} is not among permitted gateway types',
+const gatewaySchema = new mongoose.Schema(
+	{
+		serial_number: {
+			type: String,
+			required: true,
+			unique: true,
+			trim: true,
+		},
+		gateway_status: {
+			type: Boolean,
+			default: true,
+		},
+		gateway_type: {
+			type: String,
+			required: true,
+			enum: GATEWAY_TYPES,
+		},
+		building_id: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Building',
+			required: true,
+		},
+		zone_name: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+		gateway_alive: {
+			type: Boolean,
+			default: true,
+		},
+		lastSeen: {
+			type: Date,
+			default: null,
 		},
 	},
-	building_id: {
-		type: mongoose.Schema.ObjectId,
-		default: null,
-		ref: 'Building',
-	},
+	{ timestamps: true },
+)
 
-	zone_name: {
-		type: String,
-		required: false,
-		default: '',
-	},
-	gateway_alive: {
-		type: Boolean,
-		required: false,
-		default: true,
-	},
-	lastSeen: { type: Date, default: null },
-})
+gatewaySchema.index({ building_id: 1, gateway_status: 1 })
 
 const Gateway = mongoose.model('Gateway', gatewaySchema)
 module.exports = Gateway

@@ -1,36 +1,87 @@
 const mongoose = require('mongoose')
+const { COMPANY_MEMBERSHIP_TYPES } = require('../../lib/config')
 
-const clientSchema = new mongoose.Schema({
-	client_name: {
-		type: String,
-		required: true,
+const companySchema = new mongoose.Schema(
+	{
+		company_name: {
+			type: String,
+			required: true,
+			trim: true,
+		},
+		company_code: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+		biz_number: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+		company_addr: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+		company_tel: {
+			type: String,
+			default: '',
+		},
+		company_email: {
+			type: String,
+			default: '',
+			trim: true,
+			lowercase: true,
+		},
+		company_logo: {
+			type: String,
+			default: '',
+		},
+		status: {
+			type: Boolean,
+			default: true,
+		},
+		created_by: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'User',
+			default: null,
+		},
 	},
-	client_addr: {
-		type: String,
-		required: true,
-	},
-	client_buildings: {
-		type: [
-			{
-				type: mongoose.Schema.ObjectId,
-				ref: 'Building',
-			},
-		],
-		validate: [val => val.length > 0, 'At least one building is required.'],
-	},
-	boss_users: [
-		{
+	{ timestamps: true },
+)
+
+const companyMemberSchema = new mongoose.Schema(
+	{
+		user_id: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'User',
 			required: true,
 		},
-	],
-	client_status: {
-		type: Boolean,
-		required: false,
-		default: true,
+		company_id: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Company',
+			required: true,
+		},
+		member_role: {
+			type: String,
+			enum: COMPANY_MEMBERSHIP_TYPES,
+			default: 'MANAGER',
+		},
+		status: {
+			type: Boolean,
+			default: true,
+		},
 	},
-})
+	{ timestamps: true },
+)
 
-const Client = mongoose.model('Client', clientSchema)
-module.exports = Client
+companySchema.index({ company_name: 1 })
+companySchema.index({ status: 1 })
+
+companyMemberSchema.index({ user_id: 1, company_id: 1 }, { unique: true })
+companyMemberSchema.index({ user_id: 1, status: 1 })
+companyMemberSchema.index({ company_id: 1, status: 1 })
+
+const CompanySchema = mongoose.model('Company', companySchema)
+const CompanyMemberSchema = mongoose.model('Company', companySchema)
+module.exports = { CompanySchema, CompanyMemberSchema }

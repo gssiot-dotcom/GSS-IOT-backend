@@ -1,7 +1,6 @@
 const router = require('express').Router()
 const company_router = router
 const companyController = require('./company.controller')
-const uploadImage = require('../../middlewares/uploadImage')
 
 company_router.post('/create', companyController.createClient)
 

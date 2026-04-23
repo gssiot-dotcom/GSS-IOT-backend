@@ -1,4 +1,4 @@
-const isDev = process.env.DEBUG_LOGER !== 'production'
+const isDev = process.env.NODE_ENV !== 'production'
 
 function logger(...args) {
 	if (isDev) console.log(...args)

@@ -8,7 +8,7 @@ const {
 const {
 	handleAngleNodeMqttMessage,
 } = require('../../modules/nodes/angle-node/angleNode.mqtt.service')
-const { ConcurrencyQueue } = require('../../utils/ConcurrencyQueue')
+// const { ConcurrencyQueue } = require('../../utils/ConcurrencyQueue')
 const {
 	handleVerticalNodeMqttMessage,
 } = require('../../modules/nodes/vertical-node/vertical.node.service')
@@ -33,11 +33,6 @@ function initMqtt() {
 	mqttClient = createMqttClient()
 
 	// MQTT message processing concurrency limit (eng muhim fix)
-	const mqttQueue = new ConcurrencyQueue({
-		concurrency: 30, // server kuchiga qarab 10~100 oralig‘ida
-		maxQueue: 10000, // peak paytda RAM to‘lib ketmasin
-		onDrop: meta => logError('MQTT queue overflow -> DROP', meta),
-	})
 
 	mqttClient.on('connect', () => {
 		topics.all.forEach(t => {
@@ -60,38 +55,37 @@ function initMqtt() {
 		if (!gatewayNumberLast4) return
 
 		// ❗️endi barcha og‘ir ishlar queue ichida
-		mqttQueue.add(
-			async () => {
-				try {
-					if (topic.startsWith(topics.nodePrefix)) {
-						await handleNodeMqttMessage({ topic, data, gatewayNumberLast4 })
-						return
-					}
-					if (topic.startsWith(topics.anglePrefix)) {
-						await handleAngleNodeMqttMessage({
-							topic,
-							data,
-							gatewayNumberLast4,
-						})
-						return
-					}
-					if (topic.startsWith(topics.formPrefix)) {
-						await handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 })
-					}
-					if (topic.startsWith(topics.gwResPrefix)) {
-						const { eventBus } = require('../../shared/eventBus')
-						eventBus.emit('gateway.response', {
-							gw_number: gatewayNumberLast4,
-							data,
-						})
-						return
-					}
-				} catch (err) {
-					logError('MQTT dispatch error:', err?.message || err)
+
+		;(async () => {
+			try {
+				if (topic.startsWith(topics.nodePrefix)) {
+					await handleNodeMqttMessage({ topic, data, gatewayNumberLast4 })
+					return
 				}
-			},
-			{ topic, gw: gatewayNumberLast4 },
-		)
+				if (topic.startsWith(topics.anglePrefix)) {
+					await handleAngleNodeMqttMessage({
+						topic,
+						data,
+						gatewayNumberLast4,
+					})
+					return
+				}
+				if (topic.startsWith(topics.formPrefix)) {
+					await handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 })
+				}
+				if (topic.startsWith(topics.gwResPrefix)) {
+					const { eventBus } = require('../../shared/eventBus')
+					eventBus.emit('gateway.response', {
+						gw_number: gatewayNumberLast4,
+						data,
+					})
+					return
+				}
+			} catch (err) {
+				logError('MQTT dispatch error:', err?.message || err)
+			}
+		},
+			{ topic, gw: gatewayNumberLast4 })
 	})
 
 	return mqttClient

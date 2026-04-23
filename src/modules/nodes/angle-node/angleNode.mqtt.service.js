@@ -7,13 +7,13 @@ const GatewaySchema = require('../../gateways/gateway.model')
 const { eventBus } = require('../../../shared/eventBus')
 const { logger, logError } = require('../../../lib/logger')
 const { checkAndLogAngle } = require('../../../services/Alert.service') // sizdagi pathga moslang
-const { getGatewayContextByLast4 } = require('../../../cache/gatewayContext')
-const { persistQueue } = require('../../../utils/ConcurrencyQueue')
-const {
-	getCalibratedFromCache,
-	setCalibrationOffsetCache,
-	refreshCalibrationOffsetFromDb,
-} = require('../../../cache/calibration')
+// const { getGatewayContextByLast4 } = require('../../../cache/gatewayContext')
+// const { persistQueue } = require('../../../utils/ConcurrencyQueue')
+// const {
+// 	getCalibratedFromCache,
+// 	setCalibrationOffsetCache,
+// 	refreshCalibrationOffsetFromDb,
+// } = require('../../../cache/calibration')
 
 async function findGatewayByLast4(last4) {
 	if (!last4) return null
@@ -236,59 +236,6 @@ async function setAngleNodePositionsData(positions) {
 	return results
 }
 
-async function uploadAngleNodeImageData(nodeId, nodePosition, imageUrl) {
-	const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
-	try {
-		// 1) 기존 도큐먼트에서 이전 이미지 파일명 확인
-		const existing = await AngleNode.findById(nodeId)
-			.select('angle_node_img')
-			.lean()
-
-		if (!existing) throw new Error('There is no any building with this _id')
-
-		const oldImage = existing.angle_node_img
-		logger(`existing: ${oldImage}`)
-
-		// 이전 이미지가 있고, 이번에 올린 이미지와 다르면 파일 삭제 시도
-		if (oldImage && oldImage !== imageUrl) {
-			const oldBasename = path.basename(oldImage)
-			const oldFilePath = path.join(IMAGES_DIR, oldBasename)
-
-			logger(`cwd: ${process.cwd()}`)
-			logger(`IMAGES_DIR: ${IMAGES_DIR}`)
-			logger(`oldFilePath: ${oldFilePath}`)
-			try {
-				await fs.access(oldFilePath)
-				await fs.unlink(oldFilePath)
-				logger(`Old building plan image is deleted: ${oldFilePath}`)
-			} catch (error) {
-				// ENOENT(파일 없음)은 무시, 그 외 에러만 로그
-				if (error.code !== 'ENOENT') {
-					logError(
-						`Failed to delete old image ${oldFilePath}: ${error.message}`,
-					)
-				} else {
-					logError(
-						`Failed to delete old image ${oldFilePath}: ${error.message}`,
-					)
-				}
-			}
-		}
-
-		// 새 이미지 파일명과 position 으로 AngleNode 업데이트
-		const angleNode = await AngleNode.findByIdAndUpdate(
-			nodeId,
-			{ $set: { angle_node_img: imageUrl, position: nodePosition } },
-			{ new: true },
-		)
-		if (!angleNode) throw new Error('There is no any angleNode with this _id')
-		return angleNode
-	} catch (error) {
-		logError(`Error on uploading building image: ${error}`)
-		throw error
-	}
-}
-
 // ====================== functions 류현 added ======================= //
 /**
  * 단일 AngleNode position 설정 (doorNum 기준)
@@ -360,7 +307,6 @@ module.exports = {
 	deleteAngleNodeData,
 	setAngleNodePositionData,
 	setAngleNodePositionsData,
-	uploadAngleNodeImageData,
 	handleAngleNodeMqttMessage,
 	// 류현 added
 	setAngleNodePosition,

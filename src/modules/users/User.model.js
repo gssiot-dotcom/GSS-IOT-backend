@@ -1,42 +1,48 @@
-const { Schema, model } = require('mongoose')
+const { Schema, model, models } = require('mongoose')
+const { USER_TYPES } = require('../../lib/config')
 
-const userSchema = new Schema({
-	user_name: {
-		type: String,
-		required: true,
+const userSchema = new Schema(
+	{
+		name: {
+			type: String,
+			required: true,
+			trim: true,
+		},
+		email: {
+			type: String,
+			required: true,
+			unique: true,
+			trim: true,
+			lowercase: true,
+		},
+		phone: {
+			type: String,
+			default: '',
+		},
+		password: {
+			type: String,
+			required: true,
+		},
+		user_type: {
+			type: String,
+			enum: USER_TYPES,
+			required: true,
+			default: 'USER',
+		},
+		status: {
+			type: Boolean,
+			default: true,
+		},
+		last_selected_company_id: {
+			type: Schema.ObjectId,
+			ref: 'Company',
+			default: null,
+		},
 	},
-	user_email: {
-		type: String,
-		required: true,
-		index: { unique: true, sparse: true },
-	},
-	user_password: {
-		type: String,
-		required: true,
-		select: false,
-	},
-	user_phone: {
-		type: Number,
-		required: true,
-		index: { unique: true, sparse: true },
-	},
-	user_title: {
-		type: String,
-		required: false,
-		default: null,
-	},
-	user_type: {
-		type: String,
-		required: false,
-		enum: ['USER', 'BOSS', 'ADMIN'],
-		default: 'USER',
-	},
-	telegram_id: {
-		type: String,
-		required: false,
-		default: '',
-	},
-})
+	{ timestamps: true },
+)
+
+userSchema.index({ user_type: 1, status: 1 })
 
 const otpSchema = new Schema({
 	user_email: {
@@ -53,7 +59,7 @@ const otpSchema = new Schema({
 	},
 })
 
-const Otp = model('Otp', otpSchema)
+const OtpSchema = model('Otp', otpSchema)
+const UserSchema = model('User', userSchema)
 
-const User = model('User', userSchema)
-module.exports = { User, Otp }
+module.exports = { UserSchema, OtpSchema }

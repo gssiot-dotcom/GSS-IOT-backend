@@ -34,5 +34,5 @@ jobs:
           -e DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
           -e JWT_SECRET_KEY='${{ secrets.JWT_SECRET_KEY }}' \
           -e TELEGRAM_BOT_TOKEN='${{secrets.TELEGRAM_BOT_TOKEN}}' \
-          -e DEBUG_LOGER='${{secrets.DEBUG_LOGER}}' \
+          -e NODE_ENV='${{secrets.NODE_ENV}}' \
           muhammadyusuf2766/gssiot-company-backend19.08.2025

@@ -6,13 +6,14 @@ const mongoose = require('mongoose')
 const cron = require('node-cron')
 const { Server } = require('socket.io')
 
-const { app, allowedOrigins } = require('./index')
+const { app, allowedOrigins } = require('./app')
 const { initMqtt } = require('./infrastructure/mqtt')
 const { initSocket } = require('./infrastructure/socket')
 const { startHeartbeatJob } = require('./services/heartBeat.service')
 const {
 	ingestAllBuildingsWeather,
 } = require('./modules/weather/weatherIngest.service')
+const { logger, logError } = require('./lib/logger')
 
 const server = http.createServer(app)
 
@@ -36,9 +37,7 @@ let weatherCronTask
 
 const startServer = async () => {
 	try {
-		const mongoUri =
-			process.env.MONGO_URI ||
-			`mongodb+srv://Muhammad_Yusuf:${process.env.DB_PASSWORD}@papay.qzqt3.mongodb.net/GSS-FIGMA-DB?retryWrites=true&w=majority`
+		const mongoUri = process.env.MONGO_URI || ''
 
 		await mongoose.connect(mongoUri)
 		console.log('MongoDB connected successfully')
@@ -53,9 +52,9 @@ const startServer = async () => {
 		weatherCronTask = cron.schedule('*/10 * * * *', async () => {
 			try {
 				const { ok, fail } = await ingestAllBuildingsWeather()
-				console.log(`[weather cron] saved: ${ok}, failed: ${fail}`)
+				logger(`[weather cron] saved: ${ok}, failed: ${fail}`)
 			} catch (e) {
-				console.error('[weather cron] error:', e.message)
+				logError('[weather cron] error:', e.message)
 			}
 		})
 
@@ -76,10 +75,10 @@ const graceful = async signal => {
 
 	try {
 		if (heartbeat?.stop) heartbeat.stop()
-	} catch { }
+	} catch {}
 	try {
 		if (weatherCronTask?.stop) weatherCronTask.stop()
-	} catch { }
+	} catch {}
 
 	// 1) HTTP serverni yopish
 	await new Promise(resolve => server.close(resolve))

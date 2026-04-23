@@ -1,15 +1,22 @@
 const express = require('express')
-const user_router = express.Router()
+const router = express.Router()
 const userController = require('./user.controller')
 
-user_router.post('/register', userController.register)
-user_router.post('/login', userController.login)
-user_router.post('/update-user-types', userController.updateUserType)
-user_router.post('/delete-user', userController.deleteUser)
-user_router.post('/reset-password', userController.resetPwRequest)
-user_router.post('/password-verify', userController.resetPwVerify)
-user_router.get('/check-user', userController.checkUser)
-user_router.get('/logout', userController.logout)
-user_router.get('/get-users', userController.getUsers)
+const { isAuth } = require('../../middlewares/auth.middleware')
+const { isAdmin } = require('../../middlewares/admin.middleware')
+const { selfOrAdmin } = require('../../middlewares/role.middleware')
 
-module.exports = user_router
+// ============================== Only For logged in users ============================ //
+router.get('/:id', isAuth, userController.getUserById)
+
+// ============================== Only For Admin users =============================== //
+router.get('/', isAuth, isAdmin, userController.getUsers)
+router.post('/', isAuth, isAdmin, userController.createUser)
+router.delete('/:id', isAuth, isAdmin, userController.deleteUser)
+router.patch('/:id/status', isAuth, isAdmin, userController.changeUserStatus)
+
+// ============================== Only For Self or Admin users ======================== //
+router.get('/:id', isAuth, selfOrAdmin, userController.getUserById)
+router.put('/:id', isAuth, selfOrAdmin, userController.updateUser)
+
+module.exports = router

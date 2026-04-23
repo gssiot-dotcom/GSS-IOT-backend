@@ -6,10 +6,11 @@ const { AngleNode } = require('../nodes/angle-node/angleNode.model')
 const Gateway = require('./gateway.model')
 const { default: mongoose } = require('mongoose')
 const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
+const NodeSchema = require('../nodes/node.model')
 
 // ------------------------- Additional functions ------------------------------- //
 async function publishAsync(client, topic, payload) {
-	console.log('Publishing to MQTT:', { topic, payload })
+	logger('Publishing to MQTT:', { topic, payload })
 	return new Promise((resolve, reject) => {
 		client.publish(topic, JSON.stringify(payload), err => {
 			if (err) reject(err)
@@ -27,7 +28,7 @@ function waitForGatewayResponse({ gw_number, timeoutMs = 10000 }) {
 
 		const handler = payload => {
 			// payload: { gatewayNumberLast4, data }
-			console.log('Received MQTT response:', payload)
+			logger('Received MQTT response:', payload)
 			if (String(payload?.gw_number) !== String(gw_number)) return
 
 			cleanup()
@@ -67,12 +68,11 @@ async function createGatewayData(data) {
 	}
 }
 
-async function combineAngleNodeToGatewayData(data) {
+async function combineAngleNodesToGatewayData(gateway_id, nodeIds) {
 	try {
-		const { gateway_id, angle_nodes: nodesId } = data
 		// 0 input validation
 		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodesId) || nodesId.length === 0) {
+		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
 			throw new Error('Angle-nodes array (nodeIds) is required')
 		}
 
@@ -86,28 +86,28 @@ async function combineAngleNodeToGatewayData(data) {
 			)
 		}
 		// 2) kelgan nodeId lar hammasi bormi?
-		const foundNewAngleNodes = await AngleNode.find(
-			{ _id: { $in: nodesId } },
+		const foundNewAngleNodes = await NodeSchema.find(
+			{ _id: { $in: nodeIds } },
 			{ _id: 1 },
 		).lean()
 
-		if (foundNewAngleNodes.length !== nodesId.length) {
+		if (foundNewAngleNodes.length !== nodeIds.length) {
 			const foundSet = new Set(foundNewAngleNodes.map(n => String(n._id)))
-			const missing = nodesId.filter(id => !foundSet.has(String(id)))
+			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
 			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
 		}
 
 		// 3) old node ids + new node ids => unique ids
 		const oldIds = (existGateway.angle_nodes || []).map(id => String(id))
-		const newIds = nodesId.map(id => String(id))
+		const newIds = nodeIds.map(id => String(id))
 		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
 			id => new mongoose.Types.ObjectId(id),
 		)
 
 		// 4) doorNum larni olish (old + new)
-		const nodes = await AngleNode.find(
+		const nodes = await NodeSchema.find(
 			{ _id: { $in: allUniqueIds } },
-			{ doorNum: 1, _id: 1 },
+			{ node_number: 1, _id: 1 },
 		)
 		if (!nodes.length) {
 			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
@@ -123,7 +123,7 @@ async function combineAngleNodeToGatewayData(data) {
 			cmd: 2,
 			nodeType: 1,
 			numNodes: nodes.length,
-			nodes: nodes.map(n => n.doorNum),
+			nodes: nodes.map(n => n.node_number),
 		}
 
 		logger('Publish-data:', publishData, topic)
@@ -144,14 +144,9 @@ async function combineAngleNodeToGatewayData(data) {
 		await waitPromise
 
 		// 3) success bo‘lsa DB update
-		const angle_nodes = await AngleNode.updateMany(
-			{ _id: { $in: nodesId } },
+		const angle_nodes = await NodeSchema.updateMany(
+			{ _id: { $in: nodeIds } },
 			{ $set: { node_status: false, gateway_id: existGateway._id } },
-		)
-
-		await Gateway.updateOne(
-			{ _id: existGateway._id },
-			{ $addToSet: { angle_nodes: { $each: nodesId } } },
 		)
 
 		return angle_nodes
@@ -160,13 +155,11 @@ async function combineAngleNodeToGatewayData(data) {
 	}
 }
 
-async function combineNodesToGatewayData(data) {
+async function combineDoorNodesToGatewayData(gateway_id, nodeIds) {
 	try {
-		const { gateway_id, nodes: nodesId } = data
-
 		// 0) input validation
 		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodesId) || nodesId.length === 0) {
+		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
 			throw new Error('nodes array (nodeIds) is required')
 		}
 
@@ -178,29 +171,29 @@ async function combineNodesToGatewayData(data) {
 
 		// 2) kelgan nodeId lar hammasi bormi?
 		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
-		const foundNewNodes = await Node.find(
-			{ _id: { $in: nodesId } },
+		const foundNewNodes = await NodeSchema.find(
+			{ _id: { $in: nodeIds } },
 			{ _id: 1 },
 		).lean()
 
-		if (foundNewNodes.length !== nodesId.length) {
+		if (foundNewNodes.length !== nodeIds.length) {
 			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
-			const missing = nodesId.filter(id => !foundSet.has(String(id)))
+			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
 			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
 		}
 
 		// 3) old node ids + new node ids => unique ids
 		const oldIds = (gateway.nodes || []).map(id => String(id))
-		const newIds = nodesId.map(id => String(id))
+		const newIds = nodeIds.map(id => String(id))
 
 		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
 			id => new mongoose.Types.ObjectId(id),
 		)
 
 		// 4) doorNum larni olish (old + new)
-		const nodes = await Node.find(
+		const nodes = await NodeSchema.find(
 			{ _id: { $in: allUniqueIds } },
-			{ doorNum: 1, _id: 0 },
+			{ node_number: 1, _id: 0 },
 		).lean()
 
 		if (!nodes.length) {
@@ -215,7 +208,7 @@ async function combineNodesToGatewayData(data) {
 			cmd: 2,
 			nodeType: 0,
 			numNodes: nodes.length,
-			nodes: nodes.map(n => n.doorNum),
+			nodes: nodes.map(n => n.node_number),
 		}
 
 		const mqttClient = getMqttClient()
@@ -233,33 +226,21 @@ async function combineNodesToGatewayData(data) {
 		await waitPromise
 
 		// 6) success bo‘lsa: faqat NEW node larni update qilish
-		await Node.updateMany(
-			{ _id: { $in: nodesId } },
+		await NodeSchema.updateMany(
+			{ _id: { $in: nodeIds } },
 			{ $set: { node_status: false, gateway_id: gateway._id } },
 		)
-
-		// 7) gateway.nodes ga faqat yangi nodeId larni dublikat qilmasdan qo‘shish
-		// overwrite emas, addToSet ishlatamiz
-		await Gateway.updateOne(
-			{ _id: gateway._id },
-			{ $addToSet: { nodes: { $each: nodesId } } },
-		)
-
-		// updated gateway qaytaramiz
-		const updatedGateway = await Gateway.findById(gateway._id)
-		return updatedGateway
+		return
 	} catch (error) {
 		throw new Error(`Error on combining-nodes-to-gateway: ${error.message}`)
 	}
 }
 
-async function combineVerticalNodesToGateway(data) {
+async function combineGangformNodesToGateway(gateway_id, nodeIds) {
 	try {
-		const { gateway_id, vertical_nodes: nodesId } = data
-
 		// 0) input validation
 		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodesId) || nodesId.length === 0) {
+		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
 			throw new Error('nodes array (nodeIds) is required')
 		}
 
@@ -271,22 +252,22 @@ async function combineVerticalNodesToGateway(data) {
 
 		// 2) kelgan nodeId lar hammasi bormi?
 		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
-		const foundNewNodes = await VerticalNode.find(
-			{ _id: { $in: nodesId } },
+		const foundNewNodes = await NodeSchema.find(
+			{ _id: { $in: nodeIds } },
 			{ _id: 1 },
 		).lean()
 
-		console.log('Found vertical nodes for combining:', foundNewNodes)
+		logger('Found vertical nodes for combining:', foundNewNodes)
 
-		if (foundNewNodes.length !== nodesId.length) {
+		if (foundNewNodes.length !== nodeIds.length) {
 			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
-			const missing = nodesId.filter(id => !foundSet.has(String(id)))
+			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
 			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
 		}
 
 		// 3) old node ids + new node ids => unique ids
 		const oldIds = (gateway.nodes || []).map(id => String(id))
-		const newIds = nodesId.map(id => String(id))
+		const newIds = nodeIds.map(id => String(id))
 
 		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
 			id => new mongoose.Types.ObjectId(id),
@@ -328,16 +309,9 @@ async function combineVerticalNodesToGateway(data) {
 		await waitPromise
 
 		// 6) success bo‘lsa: faqat NEW node larni update qilish
-		await VerticalNode.updateMany(
-			{ _id: { $in: nodesId } },
+		await NodeSchema.updateMany(
+			{ _id: { $in: nodeIds } },
 			{ $set: { node_status: false, gateway_id: gateway._id } },
-		)
-
-		// 7) gateway.nodes ga faqat yangi nodeId larni dublikat qilmasdan qo‘shish
-		// overwrite emas, addToSet ishlatamiz
-		await Gateway.updateOne(
-			{ _id: gateway._id },
-			{ $addToSet: { nodes: { $each: nodesId } } },
 		)
 
 		// updated gateway qaytaramiz
@@ -568,9 +542,9 @@ module.exports = {
 	deleteGatewayData,
 	makeWakeUpOfficeGateway,
 	setGatewayZoneNameData,
-	combineNodesToGatewayData,
-	combineAngleNodeToGatewayData,
-	combineVerticalNodesToGateway,
+	combineDoorNodesToGatewayData,
+	combineAngleNodesToGatewayData,
+	combineGangformNodesToGateway,
 	updateZoneNameById,
 	updateZoneNameBySerial,
 }

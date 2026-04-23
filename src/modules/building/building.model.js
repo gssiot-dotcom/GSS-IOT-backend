@@ -1,83 +1,94 @@
-const mongoose = require('mongoose')
+const { default: mongoose } = require('mongoose')
 
-const buildingSchema = new mongoose.Schema({
-	building_name: {
-		type: String,
-		required: true,
-		trim: true,
-	},
-	building_num: {
-		type: Number,
-		required: true,
-	},
-	building_addr: {
-		type: String,
-		required: true,
-	},
-	building_plan_img: {
-		type: String,
-		required: false,
-		default: '',
-	},
-	building_status: {
-		type: Boolean,
-		required: false,
-		default: true,
-	},
-	gateway_sets: [
-		{
-			type: mongoose.Schema.ObjectId,
-			ref: 'Gateway',
+const buildingSchema = new mongoose.Schema(
+	{
+		building_name: {
+			type: String,
 			required: true,
-			default: [],
+			trim: true,
 		},
-	],
-	users: [
-		{
+		building_num: {
+			type: Number,
+			default: null,
+		},
+		building_addr: {
+			type: String,
+			required: true,
+			trim: true,
+		},
+		building_plan_img: {
+			type: String,
+			default: '',
+		},
+		building_status: {
+			type: Boolean,
+			default: true,
+		},
+		permit_date: {
+			type: Date,
+			default: null,
+		},
+		expiry_date: {
+			type: Date,
+			default: null,
+		},
+		company_id: {
 			type: mongoose.Schema.ObjectId,
-			ref: 'User',
-			required: false,
-			default: [],
+			ref: 'Company',
+			required: true,
 		},
-	],
-	permit_date: {
-		type: Date,
-		required: false, // Amal qilish muddati ko'rsatilsin
-		default: null, // Hozirgi sanani o'rnatadi
+		angle_alarm_level: {
+			blue: { type: Number, default: 0 },
+			green: { type: Number, default: 0 },
+			yellow: { type: Number, default: 0 },
+			red: { type: Number, default: 0 },
+		},
+		gangform_alarm_level: {
+			blue: { type: Number, default: 0 },
+			green: { type: Number, default: 0 },
+			yellow: { type: Number, default: 0 },
+			red: { type: Number, default: 0 },
+		},
 	},
-	expiry_date: {
-		type: Date,
-		required: false, // Amal qilish muddati ko'rsatilsin
-		default: null,
-	},
-	client_id: {
-		type: mongoose.Schema.ObjectId,
-		default: null,
-		ref: 'Client',
-	},
-	nodes_position_file: {
-		type: String,
-		default: '',
-	},
-	alarm_level: {
-		blue: { type: Number, default: 0 },
-		green: { type: Number, default: 0 },
-		yellow: { type: Number, default: 0 },
-		red: { type: Number, default: 0 },
-	}, // SubDocument yaratildi.
-	verticalN_alarm_level: {
-		blue: { type: Number, default: 0 },
-		green: { type: Number, default: 0 },
-		yellow: { type: Number, default: 0 },
-		red: { type: Number, default: 0 },
-	},
-})
-
-// ===  Bu qator bitta documentda quyidagi keylarning valulari bir xil bo'lmasligi uchun. shu 3 ta keyning value lari oldin kiritilgan va yana bir xil value lar kiritlib saqlansa xatolik beradi.
-buildingSchema.index(
-	{ building_name: 1, building_num: 1, building_addr: 1 },
-	{ unique: true }
+	{ timestamps: true },
 )
 
-const Building = mongoose.model('Building', buildingSchema)
-module.exports = Building
+const buildingWorkerSchema = new mongoose.Schema(
+	{
+		user_id: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'User',
+			required: true,
+		},
+		building_id: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Building',
+			required: true,
+		},
+		status: {
+			type: Boolean,
+			default: true,
+		},
+		assigned_by: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'User',
+			default: null,
+		},
+	},
+	{ timestamps: true },
+)
+
+buildingSchema.index({ company_id: 1, building_status: 1 })
+buildingSchema.index({ company_id: 1, building_name: 1 })
+
+buildingWorkerSchema.index({ user_id: 1, building_id: 1 }, { unique: true })
+buildingWorkerSchema.index({ user_id: 1, status: 1 })
+buildingWorkerSchema.index({ building_id: 1, status: 1 })
+
+const BuildingSchema = mongoose.model('Building', buildingSchema)
+const BuildingWorkerSchema = mongoose.model(
+	'Building-worker',
+	buildingWorkerSchema,
+)
+
+module.exports = { BuildingSchema, BuildingWorkerSchema }
