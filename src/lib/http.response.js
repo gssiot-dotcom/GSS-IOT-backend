@@ -12,7 +12,7 @@ exports.sendSuccess = (
 }
 
 exports.sendFail = (res, error, defaultMessage = 'Internal server error') => {
-	logError('ERROR: contr.Auth: register', error)
+	logError('ERROR:', error)
 	const statusCode = error.statusCode || 500
 
 	let message = error.message || defaultMessage

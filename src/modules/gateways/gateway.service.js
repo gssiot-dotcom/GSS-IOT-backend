@@ -1,550 +1,418 @@
+const mongoose = require('mongoose')
 const { getMqttClient } = require('../../infrastructure/mqtt')
 const { eventBus } = require('../../shared/eventBus')
-const { logger, logError } = require('../../lib/logger')
+const { logger } = require('../../lib/logger')
+
+const Gateway = require('./gateway.model')
+const NodeSchema = require('../nodes/node.model')
 const { Node } = require('../nodes/door-node/node.model')
 const { AngleNode } = require('../nodes/angle-node/angleNode.model')
-const Gateway = require('./gateway.model')
-const { default: mongoose } = require('mongoose')
 const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
-const NodeSchema = require('../nodes/node.model')
+const { NODE_TYPE } = require('../../lib/config')
 
-// ------------------------- Additional functions ------------------------------- //
-async function publishAsync(client, topic, payload) {
-	logger('Publishing to MQTT:', { topic, payload })
-	return new Promise((resolve, reject) => {
-		client.publish(topic, JSON.stringify(payload), err => {
-			if (err) reject(err)
-			else resolve(true)
-		})
-	})
-}
+class GatewayService {
+	constructor() {
+		this.gatewaySchema = Gateway
+		this.nodeSchema = NodeSchema
+		this.nodeModel = Node
+		this.angleNodeSchema = AngleNode
+		this.verticalNodeSchema = VerticalNode
+	}
 
-function waitForGatewayResponse({ gw_number, timeoutMs = 10000 }) {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			cleanup()
-			reject(new Error('MQTT response timeout'))
-		}, timeoutMs)
+	createError(message, statusCode = 400) {
+		const error = new Error(message)
+		error.statusCode = statusCode
+		return error
+	}
 
-		const handler = payload => {
-			// payload: { gatewayNumberLast4, data }
-			logger('Received MQTT response:', payload)
-			if (String(payload?.gw_number) !== String(gw_number)) return
+	normalizeZoneName(value) {
+		if (typeof value !== 'string') return null
+		const trimmed = value.trim()
+		return trimmed.length ? trimmed : null
+	}
 
-			cleanup()
+	buildGatewayTopic(serialNumber) {
+		return `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${serialNumber}`
+	}
 
-			if (payload?.data?.resp === 'success') resolve(true)
-			else reject(new Error('Failed publishing for Angle-node gateway to mqtt'))
+	resolveNodeConfig(nodeType) {
+		const key = String(nodeType || '')
+			.trim()
+			.toUpperCase()
+
+		const configMap = {
+			DOOR: {
+				dbNodeType: NODE_TYPE.DOOR, // 'door_node'
+				publishNodeType: 0,
+			},
+			ANGLE: {
+				dbNodeType: NODE_TYPE.ANGLE, // 'angle_node'
+				publishNodeType: 1,
+			},
+			GANGFORM: {
+				dbNodeType: NODE_TYPE.GANGFORM, // 'gangform_node'
+				publishNodeType: 2,
+			},
 		}
 
-		const cleanup = () => {
-			clearTimeout(timer)
-			eventBus.removeListener('gateway.response', handler)
-		}
+		const config = configMap[key]
 
-		eventBus.on('gateway.response', handler)
-	})
-}
-
-// ----------------------- Route-Controller base functions --------------------------- //
-async function createGatewayData(data) {
-	try {
-		// 기존 게이트웨이 존재 여부 체크
-		const existGateway = await Gateway.findOne({
-			serial_number: data.serial_number,
-			gateway_type: data.gateway_type,
-		})
-		if (existGateway) {
-			throw new Error(
-				`일련 번호가 ${existGateway.serial_number}인 기존 게이트웨이가 있습니다. `,
+		if (!config) {
+			throw this.createError(
+				'Invalid node_type. Allowed values: DOOR, ANGLE, GANGFORM',
+				400,
 			)
 		}
 
-		// ⭐ 노드/AngleNode/MQTT 아무 것도 안 건드리고, 게이트웨이만 생성
-		const gateway = await Gateway.create(data)
+		return {
+			requestNodeType: key, // ANGLE
+			dbNodeType: config.dbNodeType, // angle_node
+			publishNodeType: config.publishNodeType,
+			model: this.nodeSchema,
+		}
+	}
+
+	async publishAsync(topic, payload) {
+		logger('Publishing to MQTT:', { topic, payload })
+
+		const mqttClient = getMqttClient()
+
+		if (!mqttClient || !mqttClient.connected) {
+			throw this.createError(
+				'MQTT client is not connected (initMqtt called?)',
+				500,
+			)
+		}
+
+		return new Promise((resolve, reject) => {
+			mqttClient.publish(topic, JSON.stringify(payload), err => {
+				if (err) reject(err)
+				else resolve(true)
+			})
+		})
+	}
+
+	waitForGatewayResponse({ gw_number, timeoutMs = 10000 }) {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				cleanup()
+				reject(this.createError('MQTT response timeout', 504))
+			}, timeoutMs)
+
+			const handler = payload => {
+				logger('Received MQTT response:', payload)
+
+				if (String(payload?.gw_number) !== String(gw_number)) return
+
+				cleanup()
+
+				if (payload?.data?.resp === 'success') {
+					resolve(true)
+				} else {
+					reject(this.createError('Failed publishing for gateway to mqtt', 400))
+				}
+			}
+
+			const cleanup = () => {
+				clearTimeout(timer)
+				eventBus.removeListener('gateway.response', handler)
+			}
+
+			eventBus.on('gateway.response', handler)
+		})
+	}
+
+	async createGateway(payload = {}) {
+		const serial_number = payload.serial_number?.trim()
+		const gateway_type = payload.gateway_type
+		const zone_name = payload.zone_name?.trim() || ''
+
+		if (!serial_number) {
+			throw this.createError('serial_number is required', 400)
+		}
+
+		if (!gateway_type) {
+			throw this.createError('gateway_type is required', 400)
+		}
+
+		const existingGateway = await this.gatewaySchema.findOne({
+			serial_number,
+			gateway_type,
+		})
+
+		if (existingGateway) {
+			throw this.createError(
+				`일련 번호가 ${existingGateway.serial_number}인 기존 게이트웨이가 있습니다.`,
+				409,
+			)
+		}
+
+		const gateway = await this.gatewaySchema.create({
+			...payload,
+			serial_number,
+			zone_name,
+		})
+
 		return gateway
-	} catch (error) {
-		throw new Error(`Error on creating-gateway: ${error.message}`)
 	}
-}
 
-async function combineAngleNodesToGatewayData(gateway_id, nodeIds) {
-	try {
-		// 0 input validation
-		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
-			throw new Error('Angle-nodes array (nodeIds) is required')
+	async getGateways() {
+		const gateways = await this.gatewaySchema.find()
+
+		if (!gateways || gateways.length === 0) {
+			throw this.createError('There is no any gateways in database :(', 404)
 		}
 
-		// Is Exist gateway
-		const existGateway = await Gateway.findOne({
-			_id: gateway_id,
-		})
-		if (!existGateway) {
-			throw new Error(
-				`게이트웨이가 없습니다. gateway_id=${gateway_id} 먼저 게이트웨이를 생성하세요`,
-			)
-		}
-		// 2) kelgan nodeId lar hammasi bormi?
-		const foundNewAngleNodes = await NodeSchema.find(
-			{ _id: { $in: nodeIds } },
-			{ _id: 1 },
-		).lean()
-
-		if (foundNewAngleNodes.length !== nodeIds.length) {
-			const foundSet = new Set(foundNewAngleNodes.map(n => String(n._id)))
-			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
-			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
-		}
-
-		// 3) old node ids + new node ids => unique ids
-		const oldIds = (existGateway.angle_nodes || []).map(id => String(id))
-		const newIds = nodeIds.map(id => String(id))
-		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
-			id => new mongoose.Types.ObjectId(id),
-		)
-
-		// 4) doorNum larni olish (old + new)
-		const nodes = await NodeSchema.find(
-			{ _id: { $in: allUniqueIds } },
-			{ node_number: 1, _id: 1 },
-		)
-		if (!nodes.length) {
-			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
-		}
-
-		// 5) MQTT publish
-		const gw_number = existGateway.serial_number
-		const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
-
-		logger('COMBINE: Registering nodes:', nodes)
-
-		const publishData = {
-			cmd: 2,
-			nodeType: 1,
-			numNodes: nodes.length,
-			nodes: nodes.map(n => n.node_number),
-		}
-
-		logger('Publish-data:', publishData, topic)
-
-		const mqttClient = getMqttClient()
-		if (!mqttClient || !mqttClient.connected) {
-			throw new Error('MQTT client is not connected (initMqtt called?)')
-		}
-
-		// 1) publish
-		// 2) response kutish promise'ini oldindan tayyorlab olamiz
-		const waitPromise = waitForGatewayResponse({ gw_number, timeoutMs: 10000 })
-
-		// 1) publish
-		await publishAsync(mqttClient, topic, publishData)
-
-		// 2) endi kutamiz
-		await waitPromise
-
-		// 3) success bo‘lsa DB update
-		const angle_nodes = await NodeSchema.updateMany(
-			{ _id: { $in: nodeIds } },
-			{ $set: { node_status: false, gateway_id: existGateway._id } },
-		)
-
-		return angle_nodes
-	} catch (error) {
-		throw new Error(`Error on Combining nodes to gateway: ${error.message}`)
-	}
-}
-
-async function combineDoorNodesToGatewayData(gateway_id, nodeIds) {
-	try {
-		// 0) input validation
-		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
-			throw new Error('nodes array (nodeIds) is required')
-		}
-
-		// 1) gateway mavjudmi
-		const gateway = await Gateway.findById(gateway_id)
-		if (!gateway) {
-			throw new Error('Gateway not found, 먼저 게이트웨이를 생성하세요.')
-		}
-
-		// 2) kelgan nodeId lar hammasi bormi?
-		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
-		const foundNewNodes = await NodeSchema.find(
-			{ _id: { $in: nodeIds } },
-			{ _id: 1 },
-		).lean()
-
-		if (foundNewNodes.length !== nodeIds.length) {
-			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
-			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
-			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
-		}
-
-		// 3) old node ids + new node ids => unique ids
-		const oldIds = (gateway.nodes || []).map(id => String(id))
-		const newIds = nodeIds.map(id => String(id))
-
-		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
-			id => new mongoose.Types.ObjectId(id),
-		)
-
-		// 4) doorNum larni olish (old + new)
-		const nodes = await NodeSchema.find(
-			{ _id: { $in: allUniqueIds } },
-			{ node_number: 1, _id: 0 },
-		).lean()
-
-		if (!nodes.length) {
-			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
-		}
-
-		// 5) MQTT publish
-		const gw_number = gateway.serial_number
-		const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
-
-		const publishData = {
-			cmd: 2,
-			nodeType: 0,
-			numNodes: nodes.length,
-			nodes: nodes.map(n => n.node_number),
-		}
-
-		const mqttClient = getMqttClient()
-		if (!mqttClient || !mqttClient.connected) {
-			throw new Error('MQTT client is not connected (initMqtt called?)')
-		}
-
-		// 2) response kutish promise'ini oldindan tayyorlab olamiz
-		const waitPromise = waitForGatewayResponse({ gw_number, timeoutMs: 10000 })
-
-		// 1) publish
-		await publishAsync(mqttClient, topic, publishData)
-
-		// 2) endi kutamiz
-		await waitPromise
-
-		// 6) success bo‘lsa: faqat NEW node larni update qilish
-		await NodeSchema.updateMany(
-			{ _id: { $in: nodeIds } },
-			{ $set: { node_status: false, gateway_id: gateway._id } },
-		)
-		return
-	} catch (error) {
-		throw new Error(`Error on combining-nodes-to-gateway: ${error.message}`)
-	}
-}
-
-async function combineGangformNodesToGateway(gateway_id, nodeIds) {
-	try {
-		// 0) input validation
-		if (!gateway_id) throw new Error('gateway_id is required')
-		if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
-			throw new Error('nodes array (nodeIds) is required')
-		}
-
-		// 1) gateway mavjudmi
-		const gateway = await Gateway.findById(gateway_id)
-		if (!gateway) {
-			throw new Error('Gateway not found, 먼저 게이트웨이를 생성하세요.')
-		}
-
-		// 2) kelgan nodeId lar hammasi bormi?
-		// NOTE: find() -> [] qaytaradi, shuning uchun length tekshiramiz
-		const foundNewNodes = await NodeSchema.find(
-			{ _id: { $in: nodeIds } },
-			{ _id: 1 },
-		).lean()
-
-		logger('Found vertical nodes for combining:', foundNewNodes)
-
-		if (foundNewNodes.length !== nodeIds.length) {
-			const foundSet = new Set(foundNewNodes.map(n => String(n._id)))
-			const missing = nodeIds.filter(id => !foundSet.has(String(id)))
-			throw new Error(`Some nodes not found: ${missing.join(', ')}`)
-		}
-
-		// 3) old node ids + new node ids => unique ids
-		const oldIds = (gateway.nodes || []).map(id => String(id))
-		const newIds = nodeIds.map(id => String(id))
-
-		const allUniqueIds = Array.from(new Set([...oldIds, ...newIds])).map(
-			id => new mongoose.Types.ObjectId(id),
-		)
-
-		// 4) doorNum larni olish (old + new)
-		const nodes = await VerticalNode.find(
-			{ _id: { $in: allUniqueIds } },
-			{ node_number: 1, _id: 0 },
-		).lean()
-
-		if (!nodes.length) {
-			throw new Error('연결할 노드가 없습니다. nodes 배열을 확인하세요.')
-		}
-
-		// 5) MQTT publish
-		const gw_number = gateway.serial_number
-		const topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
-
-		const publishData = {
-			cmd: 2,
-			nodeType: 2,
-			numNodes: nodes.length,
-			nodes: nodes.map(n => n.node_number),
-		}
-
-		const mqttClient = getMqttClient()
-		if (!mqttClient || !mqttClient.connected) {
-			throw new Error('MQTT client is not connected (initMqtt called?)')
-		}
-
-		// 2) response kutish promise'ini oldindan tayyorlab olamiz
-		const waitPromise = waitForGatewayResponse({ gw_number, timeoutMs: 10000 })
-
-		// 1) publish
-		await publishAsync(mqttClient, topic, publishData)
-
-		// 2) endi kutamiz
-		await waitPromise
-
-		// 6) success bo‘lsa: faqat NEW node larni update qilish
-		await NodeSchema.updateMany(
-			{ _id: { $in: nodeIds } },
-			{ $set: { node_status: false, gateway_id: gateway._id } },
-		)
-
-		// updated gateway qaytaramiz
-		const updatedGateway = await Gateway.findById(gateway._id)
-		return updatedGateway
-	} catch (error) {
-		throw new Error(`Error on combining-nodes-to-gateway: ${error.message}`)
-	}
-}
-
-async function makeWakeUpOfficeGateway(gw_number, alarmActive, alertLevel) {
-	try {
-		// 게이트웨이 토픽
-		let topic = `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${gw_number}`
-
-		const publishData = {
-			cmd: 3, // 3: wake-up / 알람 설정 명령
-			alarmActive,
-			alertLevel: alertLevel,
-		}
-		logger('Publish-data:', publishData)
-
-		// 4) MQTT 서버로 publish + 응답 대기 (NEW 방식)
-		const mqttClient = getMqttClient()
-		if (!mqttClient || !mqttClient.connected) {
-			throw new Error('MQTT client is not connected (initMqtt called?)')
-		}
-
-		await publishAsync(mqttClient, topic, publishData)
-
-		// 호출 측에서 토픽을 확인할 수 있도록 반환
-		return topic
-	} catch (error) {
-		throw new Error(`Error on creating-gateway: ${error.message}`)
-	}
-}
-
-async function getGatewaysData() {
-	try {
-		const gateways = await Gateway.find()
-		if (!gateways || gateways.length == 0) {
-			throw new Error('There is no any gateways in database :(')
-		}
 		return gateways
-	} catch (error) {
-		throw error
 	}
-}
 
-async function getGatewaysByType() {
-	try {
-		const gateways = await Gateway.find()
-		if (!gateways || gateways.length == 0) {
-			throw new Error('There is no any gateways in database :(')
+	async getActiveGateways() {
+		const gateways = await this.gatewaySchema.find({ gateway_status: true })
+		return gateways || []
+	}
+
+	async getGatewayDetail(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid gateway id', 400)
 		}
 
-		const result = {
-			GATEWAY: [],
-			VERTICAL_NODE_GATEWAY: [],
+		const gateway = await this.gatewaySchema.findById(id)
+
+		if (!gateway) {
+			throw this.createError('Gateway not found', 404)
 		}
 
-		for (const g of gateways) {
-			if (g.gateway_type === 'GATEWAY' || 'NODE_GATEWAY') result.GATEWAY.push(g)
-			if (g.gateway_type === 'VERTICAL_NODE_GATEWAY')
-				result.VERTICAL_NODE_GATEWAY.push(g)
+		return gateway
+	}
+
+	async updateGatewayStatus(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid gateway id', 400)
 		}
 
-		return result
-	} catch (error) {
-		throw error
-	}
-}
-
-async function getActiveGatewaysData() {
-	try {
-		const gateways = await Gateway.find({ gateway_status: true })
-		if (!gateways || gateways.length == 0) {
-			return []
-		}
-		return gateways
-	} catch (error) {
-		throw error
-	}
-}
-
-async function getSingleGatewayData(gatewayNumber) {
-	try {
-		const gateway = await Gateway.findOne({
-			serial_number: gatewayNumber,
-		})
-
-		return gateway || null
-	} catch (error) {
-		throw new Error(`Gateway olishda xatolik: ${error.message}`)
-	}
-}
-
-async function updateGatewayStatusData(gatewayId) {
-	try {
-		const updatingGateway = await Gateway.findOneAndUpdate(
-			{ _id: gatewayId },
+		const gateway = await this.gatewaySchema.findOneAndUpdate(
+			{ _id: id },
 			[{ $set: { gateway_status: { $not: '$gateway_status' } } }],
 			{ new: true },
 		)
 
-		if (!updatingGateway) {
-			throw new Error('Node not found')
-		}
-
-		return updatingGateway
-	} catch (error) {
-		throw error
-	}
-}
-
-async function deleteGatewayData(gatewayId) {
-	try {
-		// Gateway 존재 여부 확인
-		const gateway = await Gateway.findById(gatewayId)
 		if (!gateway) {
-			throw new Error('Gateway not found')
+			throw this.createError('Gateway not found', 404)
 		}
 
-		// Gateway 에 연결된 노드 목록
-		const nodeIds = gateway.nodes
+		return gateway
+	}
 
-		// 노드가 존재한다면 node_status=true 로 복구
-		if (nodeIds.length > 0) {
-			await Node.updateMany(
-				{ _id: { $in: nodeIds } },
-				{ $set: { node_status: true } },
+	async updateGateway(id, payload = {}) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid gateway id', 400)
+		}
+
+		const allowedFields = [
+			'gateway_type',
+			'building_id',
+			'zone_name',
+			'gateway_status',
+			'gateway_alive',
+		]
+
+		const updateData = {}
+
+		for (const field of allowedFields) {
+			if (payload[field] !== undefined) {
+				updateData[field] = payload[field]
+			}
+		}
+
+		if (updateData.zone_name !== undefined) {
+			const normalizedZoneName = this.normalizeZoneName(updateData.zone_name)
+			updateData.zone_name = normalizedZoneName || ''
+		}
+
+		if (Object.keys(updateData).length === 0) {
+			throw this.createError('No valid fields provided for update', 400)
+		}
+
+		const updatedGateway = await this.gatewaySchema.findByIdAndUpdate(
+			id,
+			{ $set: updateData },
+			{ new: true, runValidators: true },
+		)
+
+		if (!updatedGateway) {
+			throw this.createError('Gateway not found', 404)
+		}
+
+		return updatedGateway
+	}
+
+	async connectNodesToGateway(gatewayId, payload = {}) {
+		try {
+			if (!mongoose.Types.ObjectId.isValid(gatewayId)) {
+				throw this.createError('Invalid gateway id', 400)
+			}
+
+			const { nodeIds = [], node_type } = payload
+
+			if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
+				throw this.createError('nodeIds array is required', 400)
+			}
+
+			if (!node_type) {
+				throw this.createError('node_type is required', 400)
+			}
+
+			const gateway = await this.gatewaySchema.findById(gatewayId)
+
+			if (!gateway) {
+				throw this.createError(
+					'Gateway not found, 먼저 게이트웨이를 생성하세요.',
+					404,
+				)
+			}
+
+			const config = this.resolveNodeConfig(node_type)
+
+			const foundNodes = await config.model
+				.find(
+					{
+						_id: { $in: nodeIds },
+						node_type: config.dbNodeType,
+					},
+					{
+						_id: 1,
+						node_number: 1,
+						node_type: 1,
+					},
+				)
+				.lean()
+
+			if (foundNodes.length !== nodeIds.length) {
+				const foundSet = new Set(foundNodes.map(node => String(node._id)))
+				const missingOrWrongType = nodeIds.filter(
+					id => !foundSet.has(String(id)),
+				)
+
+				throw this.createError(
+					`Some nodes not found or node_type is not ${config.nodeType}: ${missingOrWrongType.join(', ')}`,
+					404,
+				)
+			}
+
+			if (!foundNodes.length) {
+				throw this.createError(
+					'연결할 노드가 없습니다. nodeIds 배열을 확인하세요.',
+					400,
+				)
+			}
+
+			const gw_number = gateway.serial_number
+			const topic = this.buildGatewayTopic(gw_number)
+
+			const publishData = {
+				cmd: 2,
+				nodeType: config.publishNodeType,
+				numNodes: foundNodes.length,
+				nodes: foundNodes.map(node => node.node_number),
+			}
+
+			logger('Connect nodes publish-data:', publishData, topic)
+
+			const waitPromise = this.waitForGatewayResponse({
+				gw_number,
+				timeoutMs: 10000,
+			})
+
+			await this.publishAsync(topic, publishData)
+			await waitPromise
+
+			await config.model.updateMany(
+				{
+					_id: { $in: nodeIds },
+					node_type: config.dbNodeType,
+				},
+				{
+					$set: {
+						node_status: false,
+						gateway_id: gateway._id,
+					},
+				},
+			)
+			return {
+				gateway_id: gateway._id,
+				serial_number: gateway.serial_number,
+				node_type: config.requestNodeType,
+				db_node_type: config.dbNodeType,
+				connected_count: foundNodes.length,
+				node_ids: nodeIds,
+			}
+		} catch (error) {
+			if (error.statusCode) throw error
+			throw this.createError(
+				`Error on connecting nodes to gateway: ${error.message}`,
+				400,
 			)
 		}
+	}
 
-		// gateway 삭제
-		const deletingGateway = await Gateway.findOneAndDelete({
-			_id: gatewayId,
-		})
-		if (!deletingGateway) {
-			throw new Error('Gateway not found or already deleted')
+	async makeWakeUpOfficeGateway(payload = {}) {
+		try {
+			const serial_number = payload.serial_number
+			const alarmActive = payload.alarmActive
+			const alertLevel = payload.alertLevel
+
+			if (!serial_number) {
+				throw this.createError('gw_number is required', 400)
+			}
+
+			const topic = this.buildGatewayTopic(serial_number)
+
+			const publishData = {
+				cmd: 3,
+				alarmActive,
+				alertLevel,
+			}
+
+			logger('Publish-data:', publishData)
+
+			await this.publishAsync(topic, publishData)
+
+			return {
+				topic,
+				serial_number,
+				alarmActive,
+				alertLevel,
+			}
+		} catch (error) {
+			if (error.statusCode) throw error
+			throw this.createError(`Error on wake-up gateway: ${error.message}`, 400)
+		}
+	}
+
+	async deleteGateway(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid gateway id', 400)
 		}
 
-		// 남아있는 전체 게이트웨이 목록 리턴
-		const updatedGateways = await Gateway.find()
-		return updatedGateways
-	} catch (error) {
-		logError('Error deleting gateway:', error)
-		throw error
+		const gateway = await this.gatewaySchema.findById(id)
+
+		if (!gateway) {
+			throw this.createError('Gateway not found', 404)
+		}
+
+		await this.nodeSchema.updateMany(
+			{ gateway_id: gateway._id },
+			{ $set: { node_status: true, gateway_id: null } },
+		)
+
+		const deletedGateway = await this.gatewaySchema.findByIdAndDelete(id)
+
+		if (!deletedGateway) {
+			throw this.createError('Gateway not found or already deleted', 404)
+		}
+
+		return deletedGateway
 	}
 }
 
-async function setGatewayZoneNameData(gatewayId, zoneName) {
-	try {
-		const existing = await Gateway.findById(gatewayId)
-		if (!existing) throw new Error('There is no any gateway with this _id')
-
-		existing.zone_name = zoneName
-		const updatedGateway = await existing.save()
-		return updatedGateway
-	} catch (error) {
-		logError(`Error on uploading building image: ${error}`)
-		throw error
-	}
-}
-
-// ------------ 류현 added service ---------------- //
-
-async function updateZoneNameById(id, zoneName) {
-	if (!mongoose.isValidObjectId(id)) {
-		throw new Error('invalid gateway id')
-	}
-	const zone = normalizeZoneName(zoneName)
-	if (!zone) throw new Error('zone_name is required')
-
-	const doc = await Gateway.findByIdAndUpdate(
-		id,
-		{ $set: { zone_name: zone } },
-		{ new: true },
-	).lean()
-
-	if (!doc) throw new Error('gateway not found')
-	return {
-		ok: true,
-		gateway_id: doc._id,
-		serial_number: doc.serial_number,
-		zone_name: doc.zone_name,
-		building_id: doc.building_id,
-		gateway_alive: doc.gateway_alive,
-		lastSeen: doc.lastSeen,
-	}
-}
-
-async function updateZoneNameBySerial(serial, zoneName) {
-	const zone = normalizeZoneName(zoneName)
-	if (!zone) throw new Error('zone_name is required')
-
-	const doc = await Gateway.findOneAndUpdate(
-		{ serial_number: String(serial) },
-		{ $set: { zone_name: zone } },
-		{ new: true },
-	).lean()
-
-	if (!doc) throw new Error('gateway not found')
-	return {
-		ok: true,
-		gateway_id: doc._id,
-		serial_number: doc.serial_number,
-		zone_name: doc.zone_name,
-		building_id: doc.building_id,
-		gateway_alive: doc.gateway_alive,
-		lastSeen: doc.lastSeen,
-	}
-}
-
-function normalizeZoneName(v) {
-	if (typeof v !== 'string') return null
-	const s = v.trim()
-	return s.length ? s : null
-}
-
-module.exports = {
-	createGatewayData,
-	getGatewaysData,
-	getGatewaysByType,
-	getActiveGatewaysData,
-	getSingleGatewayData,
-	updateGatewayStatusData,
-	deleteGatewayData,
-	makeWakeUpOfficeGateway,
-	setGatewayZoneNameData,
-	combineDoorNodesToGatewayData,
-	combineAngleNodesToGatewayData,
-	combineGangformNodesToGateway,
-	updateZoneNameById,
-	updateZoneNameBySerial,
-}
+module.exports = GatewayService

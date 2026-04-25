@@ -1,238 +1,373 @@
-const GatewaySchema = require('../gateways/gateway.model')
-const { eventBus } = require('../../shared/eventBus')
-const { logger, logError } = require('../../lib/logger')
+const mongoose = require('mongoose')
+const { logger } = require('../../lib/logger')
 const NodeSchema = require('./node.model')
+const GatewaySchema = require('../gateways/gateway.model')
+const { AngleNodeHistory } = require('./angle-node/angleNode.model')
+const { VerticalNodeHistory } = require('./vertical-node/Vertical.node.model')
+const { NODE_TYPE, NODE_UPDATE_ALLOWED_FIELDS } = require('../../lib/config')
 
-async function findGatewayByLast4(last4) {
-	if (!last4) return null
-	return GatewaySchema.findOne({
-		serial_number: { $regex: `${last4}$` },
-	}).lean()
-}
+class NodeService {
+	constructor() {
+		this.nodeSchema = NodeSchema
+		this.gatewaySchema = GatewaySchema
+		this.angleNodeHistory = AngleNodeHistory
+		this.verticalNodeHistory = VerticalNodeHistory
+		this.NODE_TYPE = NODE_TYPE
+		this.NODE_UPDATE_ALLOWED_FIELDS = NODE_UPDATE_ALLOWED_FIELDS
+	}
 
-/**
- * 비계전도(AngleNode) 여러 개를 생성하는 서비스
- * @param {Array} arrayData - [{ node_number }, ...]
- * 1. node_number 기준 중복 체크
- * 2. 중복이 없으면 doorNum만 뽑아서 문서 생성(나머지 필드는 기본값)
- */
-async function createNodesData(node_type, node_numbers) {
-	try {
-		// 이미 존재하는 doorNum 이 있는지 확인
-		const existNodes = await NodeSchema.find({
-			node_number: { $in: node_numbers.map(num => num) },
+	createError(message, statusCode = 400) {
+		const error = new Error(message)
+		error.statusCode = statusCode
+		return error
+	}
+
+	isValidObjectId(id) {
+		return mongoose.Types.ObjectId.isValid(id)
+	}
+
+	pickAllowedUpdates(body = {}, allowedFields = []) {
+		const updates = {}
+
+		for (const key of allowedFields) {
+			if (key in body) {
+				updates[key] = body[key]
+			}
+		}
+
+		return updates
+	}
+
+	async createNodes(body) {
+		logger('request: createNodes')
+
+		const { node_type, node_numbers } = body
+
+		if (!Array.isArray(node_numbers) || node_numbers.length === 0) {
+			throw this.createError('node_numbers must be a non-empty array', 400)
+		}
+
+		if (!node_type) {
+			throw this.createError('node_type is required', 400)
+		}
+
+		const existNodes = await this.nodeSchema.find({
+			node_number: { $in: node_numbers },
 			node_type,
 		})
+
 		if (existNodes.length > 0) {
 			const existNodeNums = existNodes.map(node => node.node_number)
-			throw new Error(
+			throw this.createError(
 				`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`,
+				400,
 			)
 		}
-		// AngleNode 는 doorNum 만 세팅하여 생성 (position 등은 추후 별도 API로 세팅)
+
 		const arrayObject = node_numbers.map(number => ({
 			node_number: number,
 			node_type,
 		}))
 
-		const result = await NodeSchema.insertMany(arrayObject)
-		return result
-	} catch (error) {
-		throw new Error(`Error: ${error.message}`)
-	}
-}
+		const createdNodes = await this.nodeSchema.insertMany(arrayObject)
 
-/**
- * node_status = true 인 활성 Angle-Node 들만 조회
- * @returns {Array|null}
- */
-async function getActiveNodesData() {
-	try {
-		const nodes = await NodeSchema.find({
-			node_status: true,
-			gateway_id: null,
-		})
+		return {
+			count: createdNodes.length,
+			nodes: createdNodes,
+		}
+	}
+
+	async getNodes() {
+		logger('request: getNodes')
+
+		const nodes = await this.nodeSchema.find().sort({ createdAt: -1 }).lean()
+
+		const groupedNodes = nodes.reduce(
+			(acc, node) => {
+				if (node.node_type === this.NODE_TYPE.DOOR) {
+					acc.door_nodes.push(node)
+				}
+
+				if (node.node_type === this.NODE_TYPE.ANGLE) {
+					acc.angle_nodes.push(node)
+				}
+
+				if (node.node_type === this.NODE_TYPE.GANGFORM) {
+					acc.gangform_nodes.push(node)
+				}
+
+				return acc
+			},
+			{
+				door_nodes: [],
+				angle_nodes: [],
+				gangform_nodes: [],
+			},
+		)
+
+		return groupedNodes
 
 		return nodes
-	} catch (error) {
-		throw new Error(`Error on getting Angle-Nodes: ${error.message}`)
 	}
-}
 
-async function getPositionByDoorNum(doorNum) {
-	try {
-		const node = await NodeSchema.findOne({ doorNum: Number(doorNum) })
-			.select('position save_status')
-			.lean()
-		return node
-	} catch (e) {
-		logError('getAngleNodePositionByDoorNum error:', e?.message || e)
-		return null
-	}
-}
+	async getActiveNodes() {
+		logger('request: getActiveNodes')
 
-/**
- * 노드 상태 토글 (node_status true ↔ false)
- * @param {String} nodeId
- */
-async function updateNodeStatusData(nodeId) {
-	try {
-		// MongoDB 4.2 부터 지원되는 파이프라인 업데이트 사용
-		const updatingNode = await NodeSchema.findOneAndUpdate(
-			{ _id: nodeId },
-			[{ $set: { node_status: { $not: '$node_status' } } }],
-			{ new: true }, // 변경 후 도큐먼트를 반환
-		).select('node_number node_status node_type')
+		const activeNodes = await this.nodeSchema
+			.find({
+				node_status: true,
+				gateway_id: null,
+			})
+			.select('node_number node_type node_status gateway_id')
 
-		if (!updatingNode) {
-			throw new Error('Node not found')
+		if (!activeNodes || activeNodes.length === 0) {
+			throw this.createError('동작 가능한 노드가 없습니다.', 404)
 		}
 
-		return updatingNode
-	} catch (error) {
-		throw error
-	}
-}
+		const groupedNodes = activeNodes.reduce(
+			(acc, node) => {
+				if (node.node_type === this.NODE_TYPE.DOOR) {
+					acc.door_nodes.push(node)
+				}
 
-/**
- * 노드 삭제
- * @param {String} nodeId
- */
-async function deleteNodeData(nodeId) {
-	try {
-		const deletingNode = await NodeSchema.findOneAndDelete({
+				if (node.node_type === this.NODE_TYPE.ANGLE) {
+					acc.angle_nodes.push(node)
+				}
+
+				if (node.node_type === this.NODE_TYPE.GANGFORM) {
+					acc.gangform_nodes.push(node)
+				}
+
+				return acc
+			},
+			{
+				door_nodes: [],
+				angle_nodes: [],
+				gangform_nodes: [],
+			},
+		)
+
+		return groupedNodes
+	}
+
+	async nodeGraphicData(query) {
+		logger('request: nodeGraphicData')
+
+		const { node_number, node_type, from, to } = query
+
+		if (!node_number || !node_type || !from || !to) {
+			throw this.createError(
+				'node_number, node_type, from, to are required',
+				400,
+			)
+		}
+
+		let data = []
+
+		switch (node_type) {
+			case this.NODE_TYPE.ANGLE:
+				data = await this.angleNodeHistory
+					.find({
+						doorNum: Number(node_number),
+						createdAt: {
+							$gte: new Date(from),
+							$lte: new Date(to),
+						},
+					})
+					.sort({ createdAt: 1 })
+				break
+
+			case this.NODE_TYPE.GANGFORM:
+				data = await this.verticalNodeHistory
+					.find({
+						node_number: Number(node_number),
+						createdAt: {
+							$gte: new Date(from),
+							$lte: new Date(to),
+						},
+					})
+					.sort({ createdAt: 1 })
+				break
+
+			default:
+				throw this.createError('Invalid node_type', 400)
+		}
+
+		return data
+	}
+
+	async updateNode(nodeId, body) {
+		logger('request: updateNode')
+
+		if (!nodeId || !this.isValidObjectId(nodeId)) {
+			throw this.createError('Node id is required', 400)
+		}
+
+		const updates = this.pickAllowedUpdates(
+			body,
+			this.NODE_UPDATE_ALLOWED_FIELDS,
+		)
+
+		if (Object.keys(updates).length === 0) {
+			throw this.createError('No valid fields provided for update', 400)
+		}
+
+		if ('save_status' in updates) {
+			updates.save_status_lastChange = new Date()
+		}
+
+		const updatedNode = await this.nodeSchema
+			.findByIdAndUpdate(
+				nodeId,
+				{ $set: updates },
+				{
+					new: true,
+					runValidators: true,
+				},
+			)
+			.lean()
+
+		if (!updatedNode) {
+			throw this.createError('Node not found', 404)
+		}
+
+		return updatedNode
+	}
+
+	async bulkUpdateNodes(body) {
+		logger('request: bulkUpdateNodes')
+
+		if (Array.isArray(body)) {
+			if (body.length === 0) {
+				throw this.createError('Request array is empty', 400)
+			}
+
+			const operations = body
+				.map(item => {
+					const { id } = item
+					const updates = this.pickAllowedUpdates(
+						item,
+						this.NODE_UPDATE_ALLOWED_FIELDS,
+					)
+
+					if (!id || Object.keys(updates).length === 0) {
+						return null
+					}
+
+					if ('save_status' in updates) {
+						updates.save_status_lastChange = new Date()
+					}
+
+					return {
+						updateOne: {
+							filter: { _id: id },
+							update: { $set: updates },
+						},
+					}
+				})
+				.filter(Boolean)
+
+			if (operations.length === 0) {
+				throw this.createError('No valid bulk update operations found', 400)
+			}
+
+			const result = await this.nodeSchema.bulkWrite(operations)
+
+			return {
+				matchedCount: result.matchedCount ?? result.nMatched ?? 0,
+				modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+			}
+		}
+
+		const { ids, updates: rawUpdates } = body
+		const updates = this.pickAllowedUpdates(
+			rawUpdates,
+			this.NODE_UPDATE_ALLOWED_FIELDS,
+		)
+
+		if (!Array.isArray(ids) || ids.length === 0) {
+			throw this.createError('ids must be a non-empty array', 400)
+		}
+
+		if (Object.keys(updates).length === 0) {
+			throw this.createError('No valid fields provided for bulk update', 400)
+		}
+
+		if ('save_status' in updates) {
+			updates.save_status_lastChange = new Date()
+		}
+
+		const result = await this.nodeSchema.updateMany(
+			{ _id: { $in: ids } },
+			{ $set: updates },
+		)
+
+		return {
+			matchedCount: result.matchedCount ?? 0,
+			modifiedCount: result.modifiedCount ?? 0,
+		}
+	}
+
+	async updateNodeGateway(nodeId, body) {
+		logger('request: updateNodeGateway')
+
+		const { gateway_id } = body
+
+		if (!nodeId || !this.isValidObjectId(nodeId)) {
+			throw this.createError('Invalid node id', 400)
+		}
+
+		if (gateway_id === undefined) {
+			throw this.createError('gateway_id is required (can be null)', 400)
+		}
+
+		if (gateway_id !== null) {
+			if (!this.isValidObjectId(gateway_id)) {
+				throw this.createError('Invalid gateway id', 400)
+			}
+
+			const gateway = await this.gatewaySchema.findById(gateway_id).lean()
+
+			if (!gateway) {
+				throw this.createError('Gateway not found', 404)
+			}
+		}
+
+		const updatedNode = await this.nodeSchema
+			.findByIdAndUpdate(
+				nodeId,
+				{ $set: { gateway_id } },
+				{ new: true, runValidators: true },
+			)
+			.select(
+				'node_number gateway_id node_status node_alive lastSeen updatedAt',
+			)
+			.lean()
+
+		if (!updatedNode) {
+			throw this.createError('Node not found', 404)
+		}
+
+		return updatedNode
+	}
+
+	async deleteNode(nodeId) {
+		logger('request: deleteNode')
+
+		if (!nodeId || !this.isValidObjectId(nodeId)) {
+			throw this.createError('Invalid node id', 400)
+		}
+
+		const deletedNode = await this.nodeSchema.findOneAndDelete({
 			_id: nodeId,
 		})
-		if (!deletingNode) {
-			throw new Error('Node not found')
+
+		if (!deletedNode) {
+			throw this.createError('Node not found', 404)
 		}
 
-		return deletingNode
-	} catch (error) {
-		console.error('Error deleting node:', error)
-		throw error
+		return deletedNode
 	}
 }
 
-async function handleNodeMqttMessage({ data, gatewayNumberLast4 }) {
-	logger('ANG-Node MPU-sensor data:', data, gatewayNumberLast4)
-	const now = new Date()
-
-	const ctx = await getGatewayContextByLast4(gatewayNumberLast4)
-	if (!ctx) return
-
-	const { gateway_id, buildingId, gateway_type, gw_position } = ctx
-	const eventName =
-		gateway_type === 'VERTICAL_NODE_GATEWAY' ? 'rt.vertical' : 'rt.angle'
-
-	const doorNum = data.doorNum
-	const rawX = Number(data.angle_x ?? 0)
-	const rawY = Number(data.angle_y ?? 0)
-
-	// realtime: cache offset bo‘lsa tez hisobla, bo‘lmasa raw bilan ketadi
-	const { calibratedX, calibratedY } = getCalibratedFromCache(
-		doorNum,
-		rawX,
-		rawY,
-	)
-
-	// ✅ realtime emit (DBsiz)
-	eventBus.emit(eventName, {
-		doorNum,
-		gw_number: gatewayNumberLast4,
-		gateway_id,
-		buildingId,
-		angle_x: calibratedX,
-		angle_y: calibratedY,
-		gw_position,
-		lastSeen: now,
-	})
-
-	// ✅ background persist
-	persistQueue.add(() =>
-		persistAngleStuff({
-			now,
-			doorNum,
-			gw_number: gatewayNumberLast4,
-			gateway_id,
-			buildingId,
-			gw_position,
-			rawX,
-			rawY,
-			calibratedX,
-			calibratedY,
-		}),
-	)
-}
-
-// ====================== functions 류현 added ======================= //
-/**
- * 단일 AngleNode position 설정 (doorNum 기준)
- * @param {Number|String} doorNum
- * @param {String} position
- */
-async function setNodePosition(id, position) {
-	if (!position || typeof position !== 'string') {
-		throw new Error('position must be a non-empty string')
-	}
-
-	const node = await NodeSchema.findOneAndUpdate(
-		{ _id: id },
-		{ $set: { position } },
-		{ new: true },
-	)
-
-	if (!node) {
-		throw new Error(`AngleNode with node_number ${n} not found`)
-	}
-
-	return node
-}
-
-/**
- * 여러 개 AngleNode position 설정 (배열 [{node_number, position}, ...])
- * @param {Array<{node_number:number, position:string}>} positions
- */
-async function setManyNodesPosition(positions) {
-	if (!Array.isArray(positions) || positions.length === 0) {
-		throw new Error('positions must be a non-empty array')
-	}
-
-	const results = []
-
-	for (const item of positions) {
-		const n = Number(item.node_number)
-		if (!Number.isFinite(n)) {
-			throw new Error(`Invalid doorNum: ${item.node_number}`)
-		}
-		if (!item.position || typeof item.position !== 'string') {
-			throw new Error(`Invalid position for node_number: ${item.node_number}`)
-		}
-
-		const node = await NodeSchema.findOneAndUpdate(
-			{ node_number: n },
-			{ $set: { position: item.position } },
-			{ new: true },
-		).select('node_number node_type node_status position')
-
-		if (!node) {
-			throw new Error(`AngleNode with node_number ${n} not found`)
-		}
-
-		results.push(node)
-	}
-
-	return results
-}
-
-module.exports = {
-	createNodesData,
-	getActiveNodesData,
-	updateNodeStatusData,
-	deleteNodeData,
-	setNodePosition,
-	setManyNodesPosition,
-	handleNodeMqttMessage,
-	// 류현 added
-	setNodePosition,
-}
+module.exports = NodeService

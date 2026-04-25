@@ -1,325 +1,163 @@
 const GatewayService = require('./gateway.service')
-const { logger, logError } = require('../../lib/logger')
+const { sendSuccess, sendFail } = require('../../lib/http.response')
+const { logError, logger } = require('../../lib/logger')
 
-// controller 객체 생성
+const gatewayService = new GatewayService()
+
 let gatewayController = module.exports
 
-/**
- * POST /api/gateways
- * 일반 게이트웨이(Gateway)를 생성하는 컨트롤러입니다.
- * - req.body 전체를 GatewayService.createGatewayData 에 넘겨 처리합니다.
- * - 내부에서 MQTT publish 까지 수행됩니다.
- */
-gatewayController.createGateway = async (req, res) => {
+gatewayController.createGateway = async (req, res, next) => {
 	try {
-		logger('request: createGateway:')
-		const data = req.body
-		if (!data.serial_number || !data.gateway_type) {
-			return res.status(400).json({
-				state: 'fail',
-				message: 'Gateway number and gateway-type is required',
-			})
-		}
+		logger('request: gateway-create')
 
-		// 게이트웨이 생성 (중복 serial_number 체크, MQTT 설정 포함)
-		await GatewayService.createGatewayData(data)
+		const result = await gatewayService.createGateway(req.body)
 
-		return res.json({
-			state: 'succcess',
-			message: '게이트웨이가 생성돼었읍니다',
+		return sendSuccess(res, {
+			message: 'Gateway created successfully',
+			data: result,
+			statusCode: 201,
 		})
 	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Gateway: createGateway', error)
+		return sendFail(res, error)
 	}
 }
 
-/**
- * GET /api/gateways/wakeup?gw_number=0102&alarmActive=true&alertLevel=2
- * 사무실 게이트웨이에 '깨우기 / 알람 설정' 명령을 MQTT 로 전송하는 컨트롤러입니다.
- * - gw_number, alarmActive, alertLevel 을 쿼리로 받아서
- * - ProductService.makeWakeUpOfficeGateway 를 호출합니다.
- */
-gatewayController.makeWakeUpOfficeGateway = async (req, res) => {
+gatewayController.gateways = async (req, res, next) => {
 	try {
-		logger('request: makeWakeUpOfficeGateway:')
-		const gwNumber = req.query.gw_number
-		// 쿼리 문자열 "true"/"false" 를 boolean 으로 변환
-		const alarmActive = req.query.alarmActive === 'true'
-		const alertLevel = Number(req.query.alertLevel)
+		logger('request: gateway-gateways')
 
-		// MQTT 로 wake-up 명령 전송
-		const result = await GatewayService.makeWakeUpOfficeGateway(
-			gwNumber,
-			alarmActive,
-			alertLevel,
-		)
+		const result = await gatewayService.getGateways()
 
-		res.json({ state: 'succcess', message: `request sent to ${result}` })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
-
-/**
- * POST /api/gateways/office
- * 사무실용(Office) 게이트웨이를 생성하는 컨트롤러입니다.
- * - serial_number 필수 체크 후 ProductService.createOfficeGatewayData 호출
- */
-// gatewayController.createOfficeGateway = async (req, res) => {
-// 	try {
-// 		logger('request: createOfficeGateway:')
-// 		const data = req.body
-
-// 		// serial_number 필수 값 검증
-// 		if (!data.serial_number) {
-// 			return res
-// 				.status(404)
-// 				.json({ state: 'fail', message: 'Please serial number is required' })
-// 		}
-
-// 		// 게이트웨이 생성 (중복 체크 포함)
-// 		await GatewayService.createOfficeGatewayData(data)
-
-// 		res.json({ state: 'succcess', message: '게이트웨이가 생성돼었읍니다' })
-// 	} catch (error) {
-// 		logError(error.message)
-// 		res.json({ state: 'fail', message: error.message })
-// 	}
-// }
-
-/**
- * GET /api/gateways
- * 전체 게이트웨이 목록을 조회하는 컨트롤러입니다.
- */
-gatewayController.getGateways = async (req, res) => {
-	try {
-		logger('request: getGateways')
-
-		// 전체 게이트웨이 조회
-		const gateways = await GatewayService.getGatewaysData()
-
-		res.json({ state: 'succcess', gateways: gateways })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'Fail', message: error.message })
-	}
-}
-
-gatewayController.gatewaysByType = async (req, res) => {
-	try {
-		logger('request: gatewaysByType')
-
-		// 전체 게이트웨이 조회
-		const gateways = await GatewayService.getGatewaysByType()
-
-		res.json({ state: 'succcess', gateways })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'Fail', message: error.message })
-	}
-}
-
-/**
- * POST /api/products/status
- * 노드 또는 게이트웨이의 상태(on/off)를 토글하는 컨트롤러입니다.
- * - body: { product_type: 'NODE' | 'GATEWAY', product_id: ObjectId }
- * - NODE: node_status 를 반전
- * - GATEWAY: gateway_status 를 반전
- */
-gatewayController.updateGatewayStatus = async (req, res) => {
-	try {
-		logger('POST: updategatewayStatus')
-		const { product_type, product_id } = req.body
-
-		if (product_type === 'GATEWAY') {
-			// 노드 활성/비활성 상태 토글
-			const result = await GatewayService.updateGatewayStatusData(product_id)
-			return res.json({
-				state: 'success',
-				updated_node: result,
-			})
-		}
-		return res.json({
-			state: 'fail',
-			message: 'undefined product type.',
+		return sendSuccess(res, {
+			message: 'Gateways fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('ERROR: update all nodes', error)
-		res.status(500).json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Gateway: gateways', error)
+		return sendFail(res, error)
 	}
 }
 
-/**
- * POST /api/products/delete
- * 노드 또는 게이트웨이를 삭제하는 컨트롤러입니다.
- * - body: { product_type: 'NODE' | 'GATEWAY', product_id: ObjectId }
- * - NODE: 노드 단건 삭제
- * - GATEWAY: 게이트웨이 삭제 + 포함된 노드 node_status true 로 복구
- */
-gatewayController.deletGateway = async (req, res) => {
+gatewayController.activeGateways = async (req, res, next) => {
 	try {
-		logger('POST: deletGateway')
-		const { product_type, product_id } = req.query
+		logger('request: gateway-activeGateways')
 
-		if (product_type === 'GATEWAY') {
-			// 노드 삭제
-			const result = await GatewayService.deleteGatewayData(product_id)
-			return res.json({
-				state: 'success',
-				deleted: result,
-			})
-		}
+		const result = await gatewayService.getActiveGateways()
 
-		// 타입이 잘못된 경우
-		return res.json({
-			state: 'fail',
-			message: 'undefined product type.',
+		return sendSuccess(res, {
+			message: 'Active gateways fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('ERROR: update deletGateway', error)
-		res.status(500).json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Gateway: activeGateways', error)
+		return sendFail(res, error)
 	}
 }
 
-/**
- * GET /api/gateways/active
- * gateway_status = true 인 활성(사용중) 게이트웨이만 조회하는 컨트롤러입니다.
- */
-gatewayController.getActiveGateways = async (req, res) => {
+gatewayController.detail = async (req, res, next) => {
 	try {
-		logger('request: getActiveGatewaysData')
+		logger('request: gateway-detail')
 
-		// 활성 게이트웨이 조회
-		const gateways = await GatewayService.getActiveGatewaysData()
+		const result = await gatewayService.getGatewayDetail(req.params.id)
 
-		res.json({ state: 'succcess', gateways: gateways })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
-
-/**
- * GET /api/gateways/:number
- * 특정 일련번호(serial_number)를 가진 게이트웨이 단건 조회 컨트롤러입니다.
- * - URL 파라미터 :number 를 사용합니다.
- */
-gatewayController.getSingleGateway = async (req, res) => {
-	try {
-		logger('request: getSingleGateway')
-		const { number } = req.params
-
-		const gateway = await GatewayService.getSingleGatewayData(number)
-
-		if (!gateway) {
-			return res.status(404).json({
-				state: 'Fail',
-				message: '게이트웨이가 없읍니다,다른거 확인해보세요!',
-			})
-		}
-
-		res.status(200).json({
-			state: 'success',
-			gateway,
+		return sendSuccess(res, {
+			message: 'Gateway detail fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		console.error('Xatolik:', error.message)
-		res.status(500).json({
-			state: 'fail',
-			message: 'Internal Server error',
-			detail: error.message,
-		})
+		logError('ERROR: contr.Gateway: detail', error)
+		return sendFail(res, error)
 	}
 }
 
-gatewayController.setGatewayZoneName = async (req, res) => {
+gatewayController.updateStatus = async (req, res, next) => {
 	try {
-		// req.body 에서 zone_name, gateway_id 추출
-		const { zone_name, gateway_id } = req.body
+		logger('request: gateway-updateStatus')
 
-		// zone_name 필수 값 체크
-		if (!zone_name) {
-			return res.status(400).json({ message: 'zone_name is needed' })
-		}
+		const result = await gatewayService.updateGatewayStatus(req.params.id)
 
-		// 게이트웨이의 zone_name 필드 업데이트
-		const result = await GatewayService.setGatewayZoneNameData(
-			gateway_id,
-			zone_name,
-		)
-
-		return res.status(200).json({
-			state: 'success',
-			message: 'Gateway-zone added successfully!',
-			gateway: result,
+		return sendSuccess(res, {
+			message: 'Gateway status updated successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logError(error)
-		return res.status(500).json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Gateway: updateStatus', error)
+		return sendFail(res, error)
 	}
 }
 
-/**
- * POST /api/products/combine-nodes
- * 기존 게이트웨이에 일반 Node 들을 연결하는 컨트롤러입니다.
- * - body: { gateway_id, nodes:[ObjectId,...] }
- * - 내부에서 MQTT publish 까지 수행됩니다.
- */
-gatewayController.combineNodesToGateway = async (req, res) => {
+gatewayController.update = async (req, res, next) => {
 	try {
-		logger('request: combineNodesToGateway:')
-		const data = req.body
+		logger('request: gateway-update')
 
-		await GatewayService.combineNodesToGatewayData(data)
+		const result = await gatewayService.updateGateway(req.params.id, req.body)
 
-		res.json({
-			state: 'succcess',
-			message: '노드가 게이트웨이에 할당되었습니다',
+		return sendSuccess(res, {
+			message: 'Gateway updated successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Gateway: update', error)
+		return sendFail(res, error)
 	}
 }
 
-// ------------ 류현 added functions --------------- //
-
-gatewayController.updateZoneNameById = async (req, res) => {
+gatewayController.connectNodesToGateway = async (req, res, next) => {
 	try {
-		const result = await GatewayService.updateZoneNameById(
+		logger('request: gateway-connectNodesToGateway')
+
+		const result = await gatewayService.connectNodesToGateway(
 			req.params.id,
-			req.body?.zone_name,
+			req.body,
 		)
-		res.json(result)
-	} catch (e) {
-		const msg = e?.message || 'server error'
-		const code = msg.includes('invalid gateway id')
-			? 400
-			: msg.includes('zone_name is required')
-				? 400
-				: msg.includes('gateway not found')
-					? 404
-					: 500
-		res.status(code).json({ ok: false, message: msg })
+
+		return sendSuccess(res, {
+			message: 'Nodes connected to gateway successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Gateway: connectNodesToGateway', error)
+		return sendFail(res, error)
 	}
 }
 
-gatewayController.updateZoneNameBySerial = async (req, res) => {
+gatewayController.makeWakeUpOfficeGateway = async (req, res, next) => {
 	try {
-		const result = await GatewayService.updateZoneNameBySerial(
-			req.params.serial,
-			req.body?.zone_name,
-		)
-		res.json(result)
-	} catch (e) {
-		const msg = e?.message || 'server error'
-		const code = msg.includes('zone_name is required')
-			? 400
-			: msg.includes('gateway not found')
-				? 404
-				: 500
-		res.status(code).json({ ok: false, message: msg })
+		logger('request: gateway-makeWakeUpOfficeGateway')
+
+		const result = await gatewayService.makeWakeUpOfficeGateway(req.body)
+
+		return sendSuccess(res, {
+			message: 'Wake up office gateway command sent successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Gateway: makeWakeUpOfficeGateway', error)
+		return sendFail(res, error)
+	}
+}
+
+gatewayController.deleteGateway = async (req, res, next) => {
+	try {
+		logger('request: gateway-deleteGateway')
+
+		const result = await gatewayService.deleteGateway(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Gateway deleted successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Gateway: deleteGateway', error)
+		return sendFail(res, error)
 	}
 }

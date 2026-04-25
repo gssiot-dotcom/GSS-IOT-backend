@@ -25,9 +25,11 @@ const userSchema = new Schema(
 		},
 		user_type: {
 			type: String,
-			enum: USER_TYPES,
+			enum: {
+				values: USER_TYPES,
+				message: '{VALUE} is not among permitted user type',
+			},
 			required: true,
-			default: 'USER',
 		},
 		status: {
 			type: Boolean,

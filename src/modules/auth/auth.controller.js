@@ -13,7 +13,6 @@ authController.register = async (req, res, next) => {
 		logger('request: auth-register')
 		const result = await authService.register(req.body)
 		authService.setAuthCookie(res, result.token)
-
 		return sendSuccess(res, {
 			message: 'User registered successfully',
 			data: result.user,

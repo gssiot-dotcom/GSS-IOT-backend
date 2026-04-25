@@ -1,7 +1,8 @@
 const mongoose = require('mongoose')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
-const { UserSchema } = require('../users/user.model') // pathni projectingizga moslang
+const { UserSchema } = require('../users/user.model')
+const { SIGNUP_USER_TYPES } = require('../../lib/config')
 
 const PRIVATE_SELECT = '-password -__v'
 
@@ -56,6 +57,7 @@ class AuthService {
 		const email = payload.email?.trim()?.toLowerCase()
 		const password = payload.password
 		const phone = payload.phone || ''
+		const user_type = payload.user_type ?? 'USER'
 		const profile_img = payload.profile_img || ''
 
 		if (!name) {
@@ -68,6 +70,10 @@ class AuthService {
 
 		if (!password) {
 			throw this.createError('Password is required', 400)
+		}
+
+		if (!SIGNUP_USER_TYPES.includes(user_type)) {
+			throw this.createError('Invalid user type', 400)
 		}
 
 		const existingUser = await this.userSchema.findOne({ email })
@@ -83,7 +89,7 @@ class AuthService {
 			password: hashedPassword,
 			phone,
 			profile_img,
-			user_type: 'USER',
+			user_type,
 		})
 
 		const token = this.generateAccessToken(user)

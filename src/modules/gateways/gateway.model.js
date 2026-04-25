@@ -16,12 +16,17 @@ const gatewaySchema = new mongoose.Schema(
 		gateway_type: {
 			type: String,
 			required: true,
-			enum: GATEWAY_TYPES,
+			enum: {
+				values: GATEWAY_TYPES,
+				message: '{VALUE} is not permitted to gateway type',
+			},
+			default: 'GATEWAY',
 		},
 		building_id: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'Building',
-			required: true,
+			required: false,
+			default: null,
 		},
 		zone_name: {
 			type: String,

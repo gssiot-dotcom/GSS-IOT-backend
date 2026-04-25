@@ -1,3 +1,4 @@
+const { sendFail } = require('../../lib/http.response')
 const UserService = require('./user.service')
 const userService = new UserService()
 
@@ -13,11 +14,7 @@ userController.getUsers = async (req, res) => {
 			data,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to fetch users',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }
 
@@ -25,17 +22,13 @@ userController.getUserById = async (req, res) => {
 	try {
 		const data = await userService.getUserById(req.params.id)
 
-		return res.status(200).json({
-			state: 'success',
+		return sendSuccess(res, {
 			message: 'User fetched successfully',
 			data,
+			statusCode: 200,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to fetch user',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }
 
@@ -43,17 +36,13 @@ userController.createUser = async (req, res) => {
 	try {
 		const data = await userService.createUser(req.body)
 
-		return res.status(201).json({
-			state: 'success',
+		return sendSuccess(res, {
 			message: 'User created successfully',
 			data,
+			statusCode: 201,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to create user',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }
 
@@ -61,17 +50,13 @@ userController.updateUser = async (req, res) => {
 	try {
 		const data = await userService.updateUser(req.params.id, req.body)
 
-		return res.status(200).json({
-			state: 'success',
+		return sendSuccess(res, {
 			message: 'User updated successfully',
 			data,
+			statusCode: 200,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to update user',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }
 
@@ -79,17 +64,13 @@ userController.deleteUser = async (req, res) => {
 	try {
 		const data = await userService.deleteUser(req.params.id)
 
-		return res.status(200).json({
-			state: 'success',
+		return sendSuccess(res, {
 			message: 'User deleted successfully',
 			data,
+			statusCode: 200,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to delete user',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }
 
@@ -100,16 +81,12 @@ userController.changeUserStatus = async (req, res) => {
 			req.body.status,
 		)
 
-		return res.status(200).json({
-			state: 'success',
+		return sendSuccess(res, {
 			message: 'User status updated successfully',
 			data,
+			statusCode: 200,
 		})
 	} catch (error) {
-		return res.status(400).json({
-			state: 'error',
-			message: error.message || 'Failed to update user status',
-			data: null,
-		})
+		sendFail(res, error)
 	}
 }

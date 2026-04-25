@@ -6,7 +6,7 @@ const { isAuth } = require('../../middlewares/auth.middleware')
 const { isAdmin } = require('../../middlewares/admin.middleware')
 const { selfOrAdmin } = require('../../middlewares/role.middleware')
 
-// ============================== Only For logged in users ============================ //
+// ============================== Only For logged in users =========================== //
 router.get('/:id', isAuth, userController.getUserById)
 
 // ============================== Only For Admin users =============================== //
@@ -16,7 +16,6 @@ router.delete('/:id', isAuth, isAdmin, userController.deleteUser)
 router.patch('/:id/status', isAuth, isAdmin, userController.changeUserStatus)
 
 // ============================== Only For Self or Admin users ======================== //
-router.get('/:id', isAuth, selfOrAdmin, userController.getUserById)
 router.put('/:id', isAuth, selfOrAdmin, userController.updateUser)
 
 module.exports = router

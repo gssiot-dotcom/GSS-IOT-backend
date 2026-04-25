@@ -1,39 +1,24 @@
 const router = require('express').Router()
-const gateway_router = router
-const gatewayController = require('./gateway.controller')
+const { isAdmin } = require('../../middlewares/admin.middleware')
+const { isAuth } = require('../../middlewares/auth.middleware')
+const controller = require('./gateway.controller')
 
-gateway_router.post('/create', gatewayController.createGateway)
+router.use(isAuth)
 
-gateway_router.get(
-	'/wake-up-gateway',
-	gatewayController.makeWakeUpOfficeGateway,
-)
-gateway_router.get('/', gatewayController.getGateways)
-gateway_router.get('/gateways-bytype', gatewayController.gatewaysByType)
-gateway_router.get('/active-gateways', gatewayController.getActiveGateways)
-gateway_router.get(
-	'/single-gateway/:number',
-	gatewayController.getSingleGateway,
-)
-gateway_router.put('/gateway/zone-name', gatewayController.setGatewayZoneName)
-gateway_router.post('/update-status', gatewayController.updateGatewayStatus)
-gateway_router.delete('/delete', gatewayController.deletGateway)
+router.post('/', isAdmin, controller.createGateway)
 
-// ------------------------- 류현 added functions --------------------- //
+router.get('/', isAdmin, controller.gateways)
+router.get('/active', isAdmin, controller.activeGateways)
 
-// PATCH /api/gateways/:id/position
-gateway_router.patch('/:id/position', gatewayController.updateZoneNameById)
+router.get('/:id', controller.detail)
 
-// PATCH /api/gateways/by-serial/:serial/position
-gateway_router.patch(
-	'/by-serial/:serial/position',
-	gatewayController.updateZoneNameBySerial,
-)
+router.patch('/:id/status', isAdmin, controller.updateStatus)
+router.patch('/:id/update', isAdmin, controller.update)
 
-// ---- Need to check -----
-// gateway_router.post(
-// 	'/create-office-gateway',
-// 	gatewayController.createOfficeGateway
-// )
+router.post('/:id/connect/nodes', isAdmin, controller.connectNodesToGateway)
 
-module.exports = gateway_router
+router.post('/wake-up', isAdmin, controller.makeWakeUpOfficeGateway)
+
+router.delete('/:id', isAdmin, controller.deleteGateway)
+
+module.exports = router
