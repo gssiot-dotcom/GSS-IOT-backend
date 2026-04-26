@@ -181,7 +181,6 @@ class BuildingService {
 		try {
 			const gateways = await this.gatewaySchema.find({
 				building_id: buildingId,
-				gateway_type: 'VERTICAL_NODE_GATEWAY',
 			})
 
 			if (!gateways.length) {
