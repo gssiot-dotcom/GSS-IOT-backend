@@ -15,7 +15,8 @@ function initSocket(serverIo) {
 
 	// realtime events
 	eventBus.on('rt.node', payload => {
-		if (!payload?.buildingId) return
+		console.log('rt.node event received:', payload)
+		if (!payload?.buildingId) return console.log('no buildingId')
 		const room = getRoomName(payload.buildingId, 'node')
 		io.to(room).emit('realtime-data', payload)
 	})
