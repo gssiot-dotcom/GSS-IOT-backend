@@ -1,220 +1,154 @@
-const { logger, logError } = require('../../lib/logger')
 const BuildingService = require('./building.service')
+const { sendSuccess, sendFail } = require('../../lib/http.response')
+const { logError, logger } = require('../../lib/logger')
+
+const buildingService = new BuildingService()
 
 let buildingController = module.exports
 
-buildingController.createBuilding = async (req, res) => {
+buildingController.createBuilding = async (req, res, next) => {
 	try {
-		logger('request: createBuilding')
-		const data = req.body
-		const companyService = new BuildingService()
-		const result = await companyService.createBuildingData(data)
-		res.json({
-			state: 'succcess',
-			building: result,
-			message: '빌딩이 생성돼었습니다',
-		})
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
+		logger('request: building-create')
 
-buildingController.getBuildings = async (req, res) => {
-	try {
-		logger('request: getBuildings')
-		const companyService = new BuildingService()
-		const buildings = await companyService.getBuildingsData()
-		res.json({ state: 'succcess', buildings: buildings })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
+		const result = await buildingService.createBuilding(req.body)
 
-buildingController.getActiveBuildings = async (req, res) => {
-	try {
-		logger('request: getActiveBuildings')
-		const companyService = new BuildingService()
-		const buildings = await companyService.getActiveBuildingsData()
-		res.json({ state: 'succcess', buildings: buildings })
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.getBuildingNodes = async (req, res) => {
-	try {
-		logger('request: getBuildingNodes')
-
-		const { id } = req.params
-		const companyService = new BuildingService()
-
-		const result = await companyService.getBuildingNodesData(id)
-
-		if (!result || !result.building || !result.nodes) {
-			throw new Error('No building or nodes found')
-		}
-
-		res.json({
-			state: 'success',
-			building: result.building,
-			nodes: result.nodes,
-		})
-	} catch (error) {
-		console.error('Error in getBuildingNodes:', error.message)
-		res.status(400).json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.getBuildingAngleNodes = async (req, res) => {
-	try {
-		logger('request: getBuildingAngleNodes')
-
-		const { id } = req.params
-		const companyService = new BuildingService()
-
-		const result = await companyService.getBuildingAngleNodesData(id)
-
-		if (!result || !result.building || !result.angleNodes) {
-			throw new Error('No building or nodes found')
-		}
-
-		res.json({
-			state: 'success',
-			building: result.building,
-			gateways: result.gateways,
-			angle_nodes: result.angleNodes,
-		})
-	} catch (error) {
-		console.error('Error on getBuildingAngleNodes:', error.message)
-		res.status(400).json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.getBuildingVerticalNodes = async (req, res) => {
-	try {
-		logger('request: getBuildingVerticalNodes')
-		const { id } = req.params
-		const buildingService = new BuildingService()
-
-		const result = await buildingService.getBuildingVerticalNodesData(id)
-
-		if (!result || !result.building || !result.verticalNodes) {
-			throw new Error('No building or nodes found')
-		}
-
-		res.json({
-			state: 'success',
-			building: result.building,
-			gateways: result.gateways,
-			vertical_nodes: result.verticalNodes,
-		})
-	} catch (error) {
-		logError('Error on getBuildingVerticalNodes:', error.message)
-		res.status(400).json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.deleteBuilding = async (req, res) => {
-	try {
-		logger('request: deleteBuilding')
-		const { buildingId } = req.params
-		const companyService = new BuildingService(),
-			result = await companyService.deleteBuildingData(buildingId)
-
-		res.json({
-			state: 'success',
-			building: buildingId,
-			message: result.message,
-		})
-	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.uploadBuildingImage = async (req, res) => {
-	try {
-		// Endi bu yerda req.body va req.file bor
-		const { building_id } = req.body
-
-		logger(req.body)
-		if (!req.file) {
-			return res.status(400).json({ message: 'No file uploaded' })
-		}
-		if (!building_id) {
-			return res.status(400).json({ message: 'building_id is needed' })
-		}
-
-		const imageUrl = req.file.filename // yoki req.file.path
-		const companyService = new BuildingService()
-		const result = await companyService.uploadBuildingImageData(
-			building_id,
-			imageUrl,
-		)
-
-		return res.status(200).json({
-			state: 'success',
-			message: 'Building image uploaded successfully!',
-			building: result,
-		})
-	} catch (error) {
-		logError(error)
-		return res.status(500).json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.setAlarmLevel = async (req, res) => {
-	try {
-		console.log('setAlarmLevel called')
-		// Endi bu yerda req.body va req.file bor
-		const { building_id, alarmLevel } = req.body
-
-		if (!building_id) {
-			return res.status(400).json({ message: 'building_id is needed' })
-		}
-
-		const companyService = new BuildingService()
-		const result = await companyService.setAlarmLevel(building_id, alarmLevel)
-
-		return res.status(200).json({
-			state: 'success',
-			message: 'Building alarm-level set successfully!',
-			building: result,
-		})
-	} catch (error) {
-		logError(error)
-		return res.status(500).json({ state: 'fail', message: error.message })
-	}
-}
-
-buildingController.changeGatewayBuilding = async (req, res) => {
-	try {
-		logger('request: changeGatewayBuilding')
-		const { gateway_id, building_id } = req.body
-
-		if (!gateway_id || !building_id) {
-			return res.status(400).json({
-				state: 'fail',
-				message: 'gateway_id와 building_id가 필요합니다.',
-			})
-		}
-
-		const companyService = new BuildingService()
-		const result = await companyService.moveGatewayToBuildingData(
-			gateway_id,
-			building_id,
-		)
-
-		return res.json({
-			state: 'success',
-			message: '게이트웨이의 빌딩이 변경되었습니다.',
+		return sendSuccess(res, {
+			message: 'Building created successfully',
 			data: result,
+			statusCode: 201,
 		})
 	} catch (error) {
-		logError(error.message)
-		return res.status(500).json({ state: 'fail', message: error.message })
+		return sendFail(res, error)
+	}
+}
+
+buildingController.buildings = async (req, res, next) => {
+	try {
+		logger('request: building-buildings')
+
+		const result = await buildingService.getBuildings(req.query)
+
+		return sendSuccess(res, {
+			message: 'Buildings fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.activeBuildings = async (req, res, next) => {
+	try {
+		logger('request: building-activeBuildings')
+
+		const result = await buildingService.getActiveBuildings(req.query)
+
+		return sendSuccess(res, {
+			message: 'Active buildings fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.detail = async (req, res, next) => {
+	try {
+		logger('request: building-detail')
+
+		const result = await buildingService.getBuildingDetail(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Building detail fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.updateStatus = async (req, res, next) => {
+	try {
+		logger('request: building-updateStatus')
+
+		const result = await buildingService.updateBuildingStatus(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Building status updated successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.update = async (req, res, next) => {
+	try {
+		logger('request: building-update')
+
+		const result = await buildingService.updateBuilding(req.params.id, req.body)
+
+		return sendSuccess(res, {
+			message: 'Building updated successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.updateAlarmLevels = async (req, res, next) => {
+	try {
+		logger('request: building-updateAlarmLevels')
+
+		const result = await buildingService.updateAlarmLevels(
+			req.params.id,
+			req.body,
+		)
+
+		return sendSuccess(res, {
+			message: 'Building alarm levels updated successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.workers = async (req, res, next) => {
+	try {
+		logger('request: building-workers')
+
+		const result = await buildingService.getBuildingWorkers(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Building workers fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+buildingController.deleteBuilding = async (req, res, next) => {
+	try {
+		logger('request: building-deleteBuilding')
+
+		const result = await buildingService.deleteBuilding(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Building deleted successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
 	}
 }

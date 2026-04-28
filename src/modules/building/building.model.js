@@ -35,7 +35,8 @@ const buildingSchema = new mongoose.Schema(
 		company_id: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'Company',
-			required: true,
+			required: false,
+			default: null,
 		},
 		angle_alarm_level: {
 			blue: { type: Number, default: 0 },
@@ -53,42 +54,46 @@ const buildingSchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
-const buildingWorkerSchema = new mongoose.Schema(
+const buildingMemberSchema = new mongoose.Schema(
 	{
-		user_id: {
-			type: mongoose.Schema.ObjectId,
-			ref: 'User',
+		company_id: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'Company',
 			required: true,
 		},
+
 		building_id: {
-			type: mongoose.Schema.ObjectId,
+			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Building',
 			required: true,
 		},
+
+		user_id: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'User',
+			required: true,
+		},
+
 		status: {
 			type: Boolean,
 			default: true,
-		},
-		assigned_by: {
-			type: mongoose.Schema.ObjectId,
-			ref: 'User',
-			default: null,
 		},
 	},
 	{ timestamps: true },
 )
 
+buildingMemberSchema.index(
+	{ company_id: 1, building_id: 1, user_id: 1 },
+	{ unique: true },
+)
+
 buildingSchema.index({ company_id: 1, building_status: 1 })
 buildingSchema.index({ company_id: 1, building_name: 1 })
-
-buildingWorkerSchema.index({ user_id: 1, building_id: 1 }, { unique: true })
-buildingWorkerSchema.index({ user_id: 1, status: 1 })
-buildingWorkerSchema.index({ building_id: 1, status: 1 })
 
 const BuildingSchema = mongoose.model('Building', buildingSchema)
 const BuildingWorkerSchema = mongoose.model(
 	'Building-worker',
-	buildingWorkerSchema,
+	buildingMemberSchema,
 )
 
 module.exports = { BuildingSchema, BuildingWorkerSchema }

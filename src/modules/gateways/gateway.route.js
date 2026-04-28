@@ -15,10 +15,11 @@ router.get('/:id', controller.detail)
 router.patch('/:id/status', isAdmin, controller.updateStatus)
 router.patch('/:id/update', isAdmin, controller.update)
 
-router.post('/:id/connect/nodes', isAdmin, controller.connectNodesToGateway)
+router.patch('/assign-building', controller.assignBuilding)
+router.patch('/:id/unassign-building', controller.unassignBuilding)
 
+router.post('/:id/connect/nodes', controller.connectNodesToGateway)
 router.post('/wake-up', isAdmin, controller.makeWakeUpOfficeGateway)
-
 router.delete('/:id', isAdmin, controller.deleteGateway)
 
 module.exports = router

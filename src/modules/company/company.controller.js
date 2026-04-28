@@ -1,137 +1,236 @@
 const CompanyService = require('./company.service')
-const { logger, logError } = require('../../lib/logger')
+const { sendSuccess, sendFail } = require('../../lib/http.response')
+const { logError, logger } = require('../../lib/logger')
+
+const companyService = new CompanyService()
 
 let companyController = module.exports
 
-companyController.createClient = async (req, res) => {
+companyController.createCompany = async (req, res, next) => {
 	try {
-		logger('request: createClient')
-		const data = req.body
-		const companyService = new CompanyService()
-		const client = await companyService.createClientData(data)
-		res.json({
-			state: 'succcess',
-			client: client,
-			message: '클라이언트가 생성돼었읍니다',
+		logger('request: company-create')
+
+		const result = await companyService.createCompany(req.body)
+
+		return sendSuccess(res, {
+			message: 'Company created successfully',
+			data: result,
+			statusCode: 201,
 		})
 	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Company: createCompany', error)
+		return sendFail(res, error)
 	}
 }
 
-companyController.getComanies = async (req, res) => {
+companyController.companies = async (req, res, next) => {
 	try {
-		logger('request: getCompanies')
-		const comapnyService = new CompanyService()
-		const clients = await comapnyService.getCompanies()
-		res.json({
-			state: 'succcess',
-			clients: clients,
+		logger('request: company-companies')
+
+		const result = await companyService.getCompanies(req.query)
+
+		return sendSuccess(res, {
+			message: 'Companies fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('Error', error.message)
-		res.json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Company: companies', error)
+		return sendFail(res, error)
 	}
 }
 
-companyController.getClient = async (req, res) => {
+companyController.activeCompanies = async (req, res, next) => {
 	try {
-		logger('request: getCompany-buildings')
-		const { id } = req.params,
-			comapnyService = new CompanyService(),
-			result = await comapnyService.getCompanyData(id)
-		res.json({
-			state: 'success',
-			client: result.client,
-			client_buildings: result.buildings,
+		logger('request: company-activeCompanies')
+
+		const result = await companyService.getActiveCompanies()
+
+		return sendSuccess(res, {
+			message: 'Active companies fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('Error', error.message)
-		res.json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Company: activeCompanies', error)
+		return sendFail(res, error)
 	}
 }
 
-companyController.deleteCompany = async (req, res) => {
+companyController.detail = async (req, res, next) => {
 	try {
-		logger('request: deleteCompany')
-		const { clientId } = req.params
-		const companyService = new CompanyService(),
-			result = await companyService.deleteCompanyData(clientId)
+		logger('request: company-detail')
 
-		res.json({
-			state: 'success',
-			client: clientId,
-			message: result.message,
+		const result = await companyService.getCompanyDetail(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Company detail fetched successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logError(error.message)
-		res.json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Company: detail', error)
+		return sendFail(res, error)
 	}
 }
 
-companyController.uploadBuildingImage = async (req, res) => {
+companyController.buildings = async (req, res, next) => {
 	try {
-		// Endi bu yerda req.body va req.file bor
-		const { building_id } = req.body
+		logger('request: company-buildings')
 
-		logger(req.body)
-		if (!req.file) {
-			return res.status(400).json({ message: 'No file uploaded' })
-		}
-		if (!building_id) {
-			return res.status(400).json({ message: 'building_id is needed' })
-		}
+		const result = await companyService.getCompanyBuildings(req.params.id)
 
-		const imageUrl = req.file.filename // yoki req.file.path
-		const companyService = new CompanyService()
-		const result = await companyService.uploadBuildingImageData(
-			building_id,
-			imageUrl
+		return sendSuccess(res, {
+			message: 'Company buildings fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: buildings', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.updateStatus = async (req, res, next) => {
+	try {
+		logger('request: company-updateStatus')
+
+		const result = await companyService.updateCompanyStatus(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Company status updated successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: updateStatus', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.update = async (req, res, next) => {
+	try {
+		logger('request: company-update')
+
+		const result = await companyService.updateCompany(req.params.id, req.body)
+
+		return sendSuccess(res, {
+			message: 'Company updated successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: update', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.members = async (req, res, next) => {
+	try {
+		logger('request: company-members')
+
+		const result = await companyService.getCompanyMembers(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Company members fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: members', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.assignManagers = async (req, res, next) => {
+	try {
+		logger('request: company-assignManagers')
+
+		const result = await companyService.assignManagers(req.params.id, req.body)
+
+		return sendSuccess(res, {
+			message: 'Manager added to company successfully',
+			data: result,
+			statusCode: 201,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: assignManagers', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.assignWorkersToBuilding = async (req, res, next) => {
+	try {
+		logger('request: company-assignWorkersToBuilding')
+		const { id: companyId, buildingId } = req.params
+
+		const result = await companyService.assignWorkersToBuilding(
+			companyId,
+			buildingId,
+			req.body,
 		)
 
-		return res.status(200).json({
-			state: 'success',
-			message: 'Building image uploaded successfully!',
-			building: result,
+		return sendSuccess(res, {
+			message: 'Workers assigned to building successfully',
+			data: result,
+			statusCode: 201,
 		})
 	} catch (error) {
-		logError(error)
-		return res.status(500).json({ state: 'fail', message: error.message })
+		logError('ERROR: contr.Company: assignWorkersToBuilding', error)
+		return sendFail(res, error)
 	}
 }
 
-// ------------------------------------------------------------------- //
-
-companyController.getBossClients = async (req, res) => {
+companyController.assignBuildings = async (req, res, next) => {
 	try {
-		logger('request: getClientBoss')
-		const { userId } = req.body
-		const comapnyService = new CompanyService()
-		const clients = await comapnyService.getBossClientsData(userId)
-		res.json({
-			state: 'success',
-			clients: clients,
+		logger('request: company-assignBuildings')
+
+		const result = await companyService.assignBuildings(req.params.id, req.body)
+
+		return sendSuccess(res, {
+			message: 'Buildings assigned to company successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('Error', error.message)
-		res.json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Company: assignBuildings', error)
+		return sendFail(res, error)
 	}
 }
 
-companyController.getBossBuildings = async (req, res) => {
+companyController.unassignBuildings = async (req, res, next) => {
 	try {
-		logger('request: getBossBuildings')
-		const { clientId } = req.body,
-			comapnyService = new CompanyService(),
-			result = await comapnyService.getBossBuildingsData(clientId)
-		res.json({
-			state: 'success',
-			clients: result.client,
-			client_buildings: result.buildings,
+		logger('request: company-unassignBuildings')
+
+		const result = await companyService.unassignBuildings(
+			req.params.id,
+			req.body,
+		)
+
+		return sendSuccess(res, {
+			message: 'Buildings unassigned from company successfully',
+			data: result,
+			statusCode: 200,
 		})
 	} catch (error) {
-		logger('Error', error.message)
-		res.json({ state: 'Fail', message: error.message })
+		logError('ERROR: contr.Company: unassignBuildings', error)
+		return sendFail(res, error)
+	}
+}
+
+companyController.deleteCompany = async (req, res, next) => {
+	try {
+		logger('request: company-deleteCompany')
+
+		const result = await companyService.deleteCompany(req.params.id)
+
+		return sendSuccess(res, {
+			message: 'Company deleted successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.Company: deleteCompany', error)
+		return sendFail(res, error)
 	}
 }

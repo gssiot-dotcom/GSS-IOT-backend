@@ -45,6 +45,7 @@ function initMqtt() {
 
 	mqttClient.on('message', (topic, buf) => {
 		logger('data:', topic, buf.toString())
+
 		const data = safeJsonParse(buf)
 		if (!data) {
 			logError('MQTT JSON parse error')
@@ -53,15 +54,13 @@ function initMqtt() {
 
 		const gatewayNumberLast4 = getGatewayLast4FromTopic(topic)
 		if (!gatewayNumberLast4) return
-
-		// ❗️endi barcha og‘ir ishlar queue ichida
-
 		;(async () => {
 			try {
 				if (topic.startsWith(topics.nodePrefix)) {
 					await handleNodeMqttMessage({ topic, data, gatewayNumberLast4 })
 					return
 				}
+
 				if (topic.startsWith(topics.anglePrefix)) {
 					await handleAngleNodeMqttMessage({
 						topic,
@@ -70,11 +69,20 @@ function initMqtt() {
 					})
 					return
 				}
+
 				if (topic.startsWith(topics.formPrefix)) {
 					await handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 })
+					return
 				}
+
 				if (topic.startsWith(topics.gwResPrefix)) {
 					const { eventBus } = require('../../shared/eventBus')
+
+					logger('EMIT gateway.response', {
+						gw_number: gatewayNumberLast4,
+						data,
+					})
+
 					eventBus.emit('gateway.response', {
 						gw_number: gatewayNumberLast4,
 						data,
@@ -84,8 +92,7 @@ function initMqtt() {
 			} catch (err) {
 				logError('MQTT dispatch error:', err?.message || err)
 			}
-		},
-			{ topic, gw: gatewayNumberLast4 })
+		})()
 	})
 
 	return mqttClient

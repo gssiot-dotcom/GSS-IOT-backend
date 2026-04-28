@@ -1,29 +1,18 @@
 const router = require('express').Router()
-const buildingRouter = router
-const buildingController = require('./building.controller')
+const controller = require('./building.controller')
 
-// ========== Building related endpoints ======= //
-buildingRouter.post('/create', buildingController.createBuilding)
-buildingRouter.get('/active-buildings', buildingController.getActiveBuildings)
-buildingRouter.get('/get-buildings', buildingController.getBuildings)
-buildingRouter.get('/:id', buildingController.getBuildingNodes)
-buildingRouter.get('/:id/angle-nodes', buildingController.getBuildingAngleNodes)
-buildingRouter.get(
-	'/:id/vertical-nodes',
-	buildingController.getBuildingVerticalNodes,
-)
+router.post('/', controller.createBuilding)
 
-// buildingRouter.get(
-// 	'/buildings/:id/angle-nodes/summary',
-// 	buildingController.getAngleNodeSummary
-// )
-buildingRouter.delete('/delete/:buildingId', buildingController.deleteBuilding)
-// 🔹 여기 추가
-buildingRouter.put(
-	'/building/change-gateway-building',
-	buildingController.changeGatewayBuilding,
-)
+router.get('/', controller.buildings)
+router.get('/active', controller.activeBuildings)
+router.get('/:id', controller.detail)
 
-buildingRouter.put('/set-alarm-level', buildingController.setAlarmLevel)
+router.patch('/:id/status', controller.updateStatus)
+router.patch('/:id/update', controller.update)
+router.patch('/:id/alarm-levels', controller.updateAlarmLevels)
 
-module.exports = buildingRouter
+router.get('/:id/workers', controller.workers)
+
+router.delete('/:id', controller.deleteBuilding)
+
+module.exports = router

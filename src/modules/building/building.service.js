@@ -1,437 +1,266 @@
-const GatewaySchema = require('../gateways/gateway.model')
-const BuildingSchema = require('../building/building.model')
-const { Node } = require('../nodes/door-node/node.model')
-const {
-	AngleNode,
-	AngleNodeHistory,
-} = require('../nodes/angle-node/angleNode.model')
-const { logError, logger } = require('../../lib/logger')
-const fs = require('fs/promises')
-const path = require('path')
-const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
+const mongoose = require('mongoose')
+const { BuildingSchema, BuildingWorkerSchema } = require('./building.model')
+const { UserSchema } = require('../users/user.model')
 
 class BuildingService {
 	constructor() {
-		this.gatewaySchema = GatewaySchema
 		this.buildingSchema = BuildingSchema
-		this.nodeSchema = Node
-		this.angleNodeSchema = AngleNode
-		this.angleNodesHistory = AngleNodeHistory
-		this.verticalNodeSchema = VerticalNode
+		this.buildingWorkerSchema = BuildingWorkerSchema
+		this.userSchema = UserSchema
 	}
 
-	async createBuildingData(data) {
-		try {
-			// Sanalarni Date obyektiga aylantirish
-			if (data.permit_date) {
-				data.permit_date = new Date(data.permit_date)
-			}
-			if (data.expiry_date) {
-				data.expiry_date = new Date(data.expiry_date)
-			}
+	createError(message, statusCode = 400) {
+		const error = new Error(message)
+		error.statusCode = statusCode
+		return error
+	}
 
-			const existBuilding = await this.buildingSchema.findOne({
-				building_name: data.building_name,
-				building_num: data.building_num,
-			})
-
-			if (existBuilding) {
-				throw new Error(
-					`${existBuilding.building_name.toUpperCase()}건설에는 이미 같은 ${
-						existBuilding.building_num
-					}호 건물이 있습니다. 다른 번호를 입력해 주세요.`,
-				)
-			}
-
-			// Transactionni boshlash
-			const session = await this.buildingSchema.startSession()
-			session.startTransaction()
-
-			try {
-				// Step 2: Building saving
-				const building = new this.buildingSchema(data)
-				const result = await building.save({ session })
-
-				// Step 2: Update product_status for gateways in gateway_sets
-				await this.gatewaySchema.updateMany(
-					{ _id: { $in: data.gateway_sets } },
-					{ $set: { gateway_status: false, building_id: building._id } },
-					{ session },
-				)
-
-				await session.commitTransaction()
-				session.endSession()
-
-				return result
-			} catch (innerError) {
-				// Transactionni bekor qilish
-				await session.abortTransaction()
-				session.endSession()
-				throw new Error(
-					`Error on updating gateways or saving building: ${innerError.message}`,
-				)
-			}
-		} catch (error) {
-			throw new Error(`Error on creating-building: ${error.message}`)
+	normalizeAlarmLevels(level = {}) {
+		return {
+			blue: Number(level.blue ?? 0),
+			green: Number(level.green ?? 0),
+			yellow: Number(level.yellow ?? 0),
+			red: Number(level.red ?? 0),
 		}
 	}
 
-	async getBuildingsData() {
-		try {
-			const buildings = await this.buildingSchema.find()
-			if (!buildings || buildings.length == 0) {
-				return []
-			}
-			return buildings
-		} catch (error) {
-			throw error
+	async createBuilding(payload = {}) {
+		const building_name = payload.building_name?.trim()
+		const building_addr = payload.building_addr?.trim()
+
+		if (!building_name) {
+			throw this.createError('building_name is required', 400)
 		}
+
+		if (!building_addr) {
+			throw this.createError('building_addr is required', 400)
+		}
+
+		const building = await this.buildingSchema.create({
+			...payload,
+			building_name,
+			building_addr,
+			angle_alarm_level: this.normalizeAlarmLevels(payload.angle_alarm_level),
+			gangform_alarm_level: this.normalizeAlarmLevels(
+				payload.gangform_alarm_level,
+			),
+		})
+
+		return building
 	}
 
-	async getActiveBuildingsData() {
-		try {
-			const buildings = await this.buildingSchema.find({
-				building_status: true,
-			})
-			if (!buildings || buildings.length == 0) {
-				return []
+	async getBuildings(query = {}) {
+		const filter = {}
+
+		if (query.company_id) {
+			if (!mongoose.Types.ObjectId.isValid(query.company_id)) {
+				throw this.createError('Invalid company id', 400)
 			}
-			return buildings
-		} catch (error) {
-			throw error
+
+			filter.company_id = query.company_id
 		}
+
+		const buildings = await this.buildingSchema
+			.find(filter)
+			.sort({ createdAt: -1 })
+
+		return buildings
 	}
 
-	async getBuildingNodesData(buildingId) {
-		try {
-			const gateways = await this.gatewaySchema.find({
+	async getActiveBuildings(query = {}) {
+		const filter = { building_status: true }
+
+		if (query.company_id) {
+			if (!mongoose.Types.ObjectId.isValid(query.company_id)) {
+				throw this.createError('Invalid company id', 400)
+			}
+
+			filter.company_id = query.company_id
+		}
+
+		const buildings = await this.buildingSchema
+			.find(filter)
+			.sort({ createdAt: -1 })
+
+		return buildings
+	}
+
+	async getBuildingDetail(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const building = await this.buildingSchema.findById(id)
+
+		if (!building) {
+			throw this.createError('Building not found', 404)
+		}
+
+		return building
+	}
+
+	async updateBuildingStatus(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const building = await this.buildingSchema.findOneAndUpdate(
+			{ _id: id },
+			[{ $set: { building_status: { $not: '$building_status' } } }],
+			{ new: true },
+		)
+
+		if (!building) {
+			throw this.createError('Building not found', 404)
+		}
+
+		return building
+	}
+
+	async updateBuilding(id, payload = {}) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const allowedFields = [
+			'building_name',
+			'building_num',
+			'building_addr',
+			'building_plan_img',
+			'building_status',
+			'permit_date',
+			'expiry_date',
+			'company_id',
+		]
+
+		const updateData = {}
+
+		for (const field of allowedFields) {
+			if (payload[field] !== undefined) {
+				updateData[field] = payload[field]
+			}
+		}
+
+		if (updateData.building_name !== undefined) {
+			updateData.building_name = String(updateData.building_name).trim()
+			if (!updateData.building_name) {
+				throw this.createError('building_name cannot be empty', 400)
+			}
+		}
+
+		if (updateData.building_addr !== undefined) {
+			updateData.building_addr = String(updateData.building_addr).trim()
+			if (!updateData.building_addr) {
+				throw this.createError('building_addr cannot be empty', 400)
+			}
+		}
+
+		if (updateData.company_id !== undefined) {
+			if (!mongoose.Types.ObjectId.isValid(updateData.company_id)) {
+				throw this.createError('Invalid company id', 400)
+			}
+		}
+
+		if (Object.keys(updateData).length === 0) {
+			throw this.createError('No valid fields provided for update', 400)
+		}
+
+		const updatedBuilding = await this.buildingSchema.findByIdAndUpdate(
+			id,
+			{ $set: updateData },
+			{ new: true },
+		)
+
+		if (!updatedBuilding) {
+			throw this.createError('Building not found', 404)
+		}
+
+		return updatedBuilding
+	}
+
+	async updateAlarmLevels(id, payload = {}) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const updateData = {}
+
+		if (payload.angle_alarm_level !== undefined) {
+			updateData.angle_alarm_level = this.normalizeAlarmLevels(
+				payload.angle_alarm_level,
+			)
+		}
+
+		if (payload.gangform_alarm_level !== undefined) {
+			updateData.gangform_alarm_level = this.normalizeAlarmLevels(
+				payload.gangform_alarm_level,
+			)
+		}
+
+		if (Object.keys(updateData).length === 0) {
+			throw this.createError(
+				'angle_alarm_level or gangform_alarm_level is required',
+				400,
+			)
+		}
+
+		const updatedBuilding = await this.buildingSchema.findByIdAndUpdate(
+			id,
+			{ $set: updateData },
+			{ new: true },
+		)
+
+		if (!updatedBuilding) {
+			throw this.createError('Building not found', 404)
+		}
+
+		return updatedBuilding
+	}
+
+	async getBuildingWorkers(buildingId) {
+		if (!mongoose.Types.ObjectId.isValid(buildingId)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const building = await this.buildingSchema.findById(buildingId)
+		if (!building) {
+			throw this.createError('Building not found', 404)
+		}
+
+		const workers = await this.buildingWorkerSchema
+			.find({
 				building_id: buildingId,
+				status: true,
 			})
+			.populate('user_id', 'name email phone user_type')
+			.populate('assigned_by', 'name email')
+			.sort({ createdAt: -1 })
 
-			if (!gateways.length) {
-				throw new Error('No gateways found for this building')
-			}
-
-			const gatewayIds = gateways.map(gateway => gateway._id)
-
-			const nodes = await this.nodeSchema
-				.find({
-					gateway_id: { $in: gatewayIds },
-				})
-				.sort({ doorNum: 1 })
-
-			const building = await this.buildingSchema.findOne({ _id: buildingId })
-
-			if (!building) {
-				throw new Error('Building not found')
-			}
-			if (!nodes || nodes.length === 0) {
-				throw new Error('No nodes found for this building')
-			}
-
-			return { building, nodes }
-		} catch (error) {
-			// Errorni ushlash
-			console.error('Error in getBuildingNodesData:', error.message)
-			throw error // Asl xatoni qaytaramiz
-		}
+		return workers
 	}
 
-	async getBuildingAngleNodesData(buildingId) {
-		try {
-			const gateways = await this.gatewaySchema
-				.find({
-					building_id: buildingId,
-					gateway_type: 'GATEWAY',
-				})
-				.populate('nodes', 'doorNum')
-				.populate('angle_nodes', 'doorNum')
-
-			if (!gateways.length) {
-				throw new Error('No gateways found for this building')
-			}
-
-			const gatewayIds = gateways.map(gateway => gateway._id)
-
-			const angleNodes = await this.angleNodeSchema
-				.find({
-					gateway_id: { $in: gatewayIds },
-				})
-				.populate('gateway_id', 'serial_number')
-				.sort({ doorNum: 1 })
-
-			const building = await this.buildingSchema.findOne({ _id: buildingId })
-
-			if (!building) {
-				throw new Error('Building not found')
-			}
-			if (!angleNodes || angleNodes.length === 0) {
-				throw new Error('No nodes found for this building')
-			}
-
-			return { building, gateways, angleNodes }
-		} catch (error) {
-			// Errorni ushlash
-			console.error('Error on getBuildingNodesData:', error.message)
-			throw error // Asl xatoni qaytaramiz
+	async deleteBuilding(id) {
+		if (!mongoose.Types.ObjectId.isValid(id)) {
+			throw this.createError('Invalid building id', 400)
 		}
-	}
 
-	async getBuildingVerticalNodesData(buildingId) {
-		try {
-			const gateways = await this.gatewaySchema.find({
-				building_id: buildingId,
-				gateway_type: 'VERTICAL_NODE_GATEWAY',
-			})
-
-			if (!gateways.length) {
-				throw new Error('No gateways found for this building')
-			}
-
-			const gatewayIds = gateways.map(gateway => gateway._id)
-
-			const verticalNodes = await this.verticalNodeSchema
-				.find({
-					gateway_id: { $in: gatewayIds },
-				})
-				.populate('gateway_id', 'serial_number')
-				.sort({ node_number: 1 })
-
-			const building = await this.buildingSchema.findOne({ _id: buildingId })
-
-			if (!building) {
-				throw new Error('Building not found')
-			}
-			if (!verticalNodes || verticalNodes.length === 0) {
-				throw new Error('No nodes found for this building')
-			}
-
-			return { building, verticalNodes }
-		} catch (error) {
-			// Errorni ushlash
-			console.error('Error on getBuildingNodesData:', error.message)
-			throw error // Asl xatoni qaytaramiz
+		const building = await this.buildingSchema.findById(id)
+		if (!building) {
+			throw this.createError('Building not found', 404)
 		}
-	}
 
-	// async getAngleNodesSummaryData(buildingId) {
-	// 	try {
-	// 		const gateways = await this.gatewaySchema.find({
-	// 			building_id: buildingId,
-	// 		})
+		await this.buildingWorkerSchema.updateMany(
+			{ building_id: id, status: true },
+			{ $set: { status: false } },
+		)
 
-	// 		if (!gateways.length) {
-	// 			throw new Error('No gateways found for this building')
-	// 		}
+		const deletedBuilding = await this.buildingSchema.findByIdAndDelete(id)
 
-	// 		const gatewayIds = gateways.map(gateway => gateway._id)
-
-	// 		const angleNodes = await this.angleNodeSchema
-	// 			.find({
-	// 				gateway_id: { $in: gatewayIds },
-	// 			})
-	// 			.sort({ doorNum: 1 })
-
-	// 		const promises = angleNodes.map(async item => {
-	// 			const maxAngleX = await this.angleNodesHistory
-	// 				.findOne({ doorNum: item.doorNum })
-	// 				.sort({ angle_x: -1 })
-	// 				.limit(1)
-
-	// 			const minAngleX = await this.angleNodesHistory
-	// 				.findOne({ doorNum: item.doorNum })
-	// 				.sort({ angle_x: 1 })
-	// 				.limit(1)
-
-	// 			const maxAngleY = await this.angleNodesHistory
-	// 				.findOne({ doorNum: item.doorNum })
-	// 				.sort({ angle_y: -1 })
-	// 				.limit(1)
-
-	// 			const minAngleY = await this.angleNodesHistory
-	// 				.findOne({ doorNum: item.doorNum })
-	// 				.sort({ angle_y: 1 })
-	// 				.limit(1)
-
-	// 			return {
-	// 				doorNum: item.doorNum,
-	// 				maxAngleX,
-	// 				minAngleX,
-	// 				maxAngleY,
-	// 				minAngleY,
-	// 			}
-	// 		})
-
-	// 		const result = await Promise.all(promises)
-
-	// 		return { result }
-	// 	} catch (error) {
-	// 		// Errorni ushlash
-	// 		console.error('Error on getBuildingNodesData:', error.message)
-	// 		throw error // Asl xatoni qaytaramiz
-	// 	}
-	// }
-
-	async deleteBuildingData(buildingId) {
-		try {
-			// 1. Clientni topish va uning ichidagi client_buildings array'ni olish
-			const building = await this.buildingSchema.findById(buildingId)
-			if (!building) {
-				throw new Error('Client not found')
-			}
-
-			// 2. client_buildings ichidagi barcha buildingId larni olish
-			const gatewayIds = building.gateway_sets
-
-			// 3. Barcha buildinglarning statusini true ga o'zgartirish
-			await this.gatewaySchema.updateMany(
-				{ _id: { $in: gatewayIds } }, // buildingId lar bo‘yicha qidirish
-				{ $set: { gateway_status: true } }, // building_status ni true qilish
-			)
-
-			// 4. Clientni o‘chirish
-			await this.buildingSchema.findByIdAndDelete(buildingId)
-
-			return { message: 'Client o‘chirildi uning binolari yangilandi.' }
-		} catch (error) {
-			console.error(error)
-			throw new Error('Error on deleting company by id')
+		if (!deletedBuilding) {
+			throw this.createError('Building not found or already deleted', 404)
 		}
-	}
 
-	async uploadBuildingImageData(building_id, imageUrl) {
-		const IMAGES_DIR = path.join(process.cwd(), 'static', 'images')
-		try {
-			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
-			const existing = await this.buildingSchema
-				.findById(building_id)
-				.select('building_plan_img') // xohlasangiz "-_id" ham qo‘shishingiz mumkin
-				.lean()
-
-			if (!existing) throw new Error('There is no any building with this _id')
-
-			const oldImage = existing.building_plan_img
-			logger(`existing: ${oldImage}`)
-
-			if (oldImage && oldImage !== imageUrl) {
-				// Faqat fayl nomini ajratib olamiz (URL/yo‘l bo‘lsa ham)
-				const oldBasename = path.basename(oldImage)
-				const oldFilePath = path.join(IMAGES_DIR, oldBasename) // ✅ to‘g‘ri
-				// Debug uchun foydali:
-				logger(`cwd: ${process.cwd()}`)
-				logger(`IMAGES_DIR: ${IMAGES_DIR}`)
-				logger(`oldFilePath: ${oldFilePath}`)
-				try {
-					await fs.access(oldFilePath)
-					await fs.unlink(oldFilePath)
-					logger(`Old building plan image is deleted: ${oldFilePath}`)
-				} catch (error) {
-					// Fayl topilmasa (ENOENT) — e’tiborsiz, boshqa xatolarni log qilamiz
-					if (error.code !== 'ENOENT') {
-						logError(
-							`Failed to delete old image ${oldFilePath}: ${error.message}`,
-						)
-						// agar majburiy o‘chirish bo‘lsa, shu yerda throw qilsangiz ham bo‘ladi
-					} else {
-						logError(
-							`Failed to delete old image ${oldFilePath}: ${error.message}`,
-						)
-					}
-				}
-			}
-			const building = await this.buildingSchema.findByIdAndUpdate(
-				building_id,
-				{ $set: { building_plan_img: imageUrl } },
-				{ new: true }, // yangilangan hujjat qaytadi
-			)
-			if (!building) throw new Error('There is no any building with this _id')
-			return building
-		} catch (error) {
-			logError(`Error on uploading building image: ${error}`)
-			throw error // `throw new Error(error)` emas, to‘g‘ridan
-		}
-	}
-
-	// 게이트웨이를 다른 빌딩으로 이동시키는 서비스
-	// gatewayId: 옮길 게이트웨이 _id
-	// newBuildingId: 대상 빌딩 _id (지금 보고 있는 빌딩)
-	async moveGatewayToBuildingData(gatewayId, newBuildingId) {
-		// Building 기준으로 세션 생성 (기존 createBuildingData와 동일 패턴)
-		const session = await this.buildingSchema.startSession()
-		session.startTransaction()
-
-		try {
-			// 1) 게이트웨이 / 빌딩 존재 확인
-			const gateway = await this.gatewaySchema
-				.findById(gatewayId)
-				.session(session)
-			if (!gateway) {
-				throw new Error('Gateway not found')
-			}
-
-			const newBuilding = await this.buildingSchema
-				.findById(newBuildingId)
-				.session(session)
-			if (!newBuilding) {
-				throw new Error('Building not found')
-			}
-
-			const oldBuildingId = gateway.building_id
-
-			// 2) 기존 빌딩의 gateway_sets 에서 이 게이트웨이 제거
-			if (oldBuildingId) {
-				await this.buildingSchema.updateOne(
-					{ _id: oldBuildingId },
-					{ $pull: { gateway_sets: gateway._id } },
-					{ session },
-				)
-			}
-
-			// 3) 새 빌딩의 gateway_sets 에 이 게이트웨이 추가 (중복 방지)
-			await this.buildingSchema.updateOne(
-				{ _id: newBuildingId, gateway_sets: { $ne: gateway._id } },
-				{ $push: { gateway_sets: gateway._id } },
-				{ session },
-			)
-
-			// 4) 게이트웨이 도큐먼트의 building_id 업데이트
-			gateway.building_id = newBuildingId
-			await gateway.save({ session })
-
-			// 5) 트랜잭션 커밋
-			await session.commitTransaction()
-			session.endSession()
-
-			return {
-				gateway,
-				oldBuildingId,
-				newBuildingId,
-			}
-		} catch (error) {
-			await session.abortTransaction()
-			session.endSession()
-			throw new Error(`Error on moving gateway to building: ${error.message}`)
-		}
-	}
-
-	async setAlarmLevel(building_id, alarmLevel) {
-		try {
-			// / 1) Avval mavjud hujjatni o‘qib, eski rasm nomini oling
-			const existing = await this.buildingSchema.findById(building_id)
-
-			if (!existing) throw new Error('There is no any building with this _id')
-
-			const building = await this.buildingSchema.findByIdAndUpdate(
-				building_id,
-				{ $set: { alarm_level: alarmLevel } },
-				{ new: true }, // yangilangan hujjat qaytadi
-			)
-			if (!building) throw new Error('There is no any building with this _id')
-			return building
-		} catch (error) {
-			logError(`Error on uploading building image: ${error}`)
-			throw error // `throw new Error(error)` emas, to‘g‘ridan
-		}
+		return deletedBuilding
 	}
 }
 

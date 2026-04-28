@@ -1,5 +1,5 @@
 const mongoose = require('mongoose')
-const { COMPANY_MEMBERSHIP_TYPES } = require('../../lib/config')
+const { COMPANY_MEMBER_TYPES } = require('../../lib/config')
 
 const companySchema = new mongoose.Schema(
 	{
@@ -52,21 +52,27 @@ const companySchema = new mongoose.Schema(
 
 const companyMemberSchema = new mongoose.Schema(
 	{
-		user_id: {
-			type: mongoose.Schema.ObjectId,
-			ref: 'User',
-			required: true,
-		},
 		company_id: {
-			type: mongoose.Schema.ObjectId,
+			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Company',
 			required: true,
 		},
+
+		user_id: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'User',
+			required: true,
+		},
+
 		member_role: {
 			type: String,
-			enum: COMPANY_MEMBERSHIP_TYPES,
-			default: 'MANAGER',
+			enum: {
+				values: Object.values(COMPANY_MEMBER_TYPES),
+				message: '{VALUE} is not permitted for member_role',
+			},
+			required: true,
 		},
+
 		status: {
 			type: Boolean,
 			default: true,
@@ -74,6 +80,8 @@ const companyMemberSchema = new mongoose.Schema(
 	},
 	{ timestamps: true },
 )
+
+companyMemberSchema.index({ company_id: 1, user_id: 1 }, { unique: true })
 
 companySchema.index({ company_name: 1 })
 companySchema.index({ status: 1 })
@@ -83,5 +91,8 @@ companyMemberSchema.index({ user_id: 1, status: 1 })
 companyMemberSchema.index({ company_id: 1, status: 1 })
 
 const CompanySchema = mongoose.model('Company', companySchema)
-const CompanyMemberSchema = mongoose.model('Company', companySchema)
+const CompanyMemberSchema = mongoose.model(
+	'Company-member',
+	companyMemberSchema,
+)
 module.exports = { CompanySchema, CompanyMemberSchema }

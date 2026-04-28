@@ -1,18 +1,26 @@
 const router = require('express').Router()
-const company_router = router
-const companyController = require('./company.controller')
+const controller = require('./company.controller')
 
-company_router.post('/create', companyController.createClient)
+router.post('/', controller.createCompany)
 
-company_router.get('/', companyController.getComanies)
-company_router.get('/:id', companyController.getClient)
+router.get('/', controller.companies)
+router.get('/active', controller.activeCompanies)
+router.get('/:id', controller.detail)
+router.get('/:id/buildings', controller.buildings)
 
-company_router.delete('/delete/:clientId', companyController.deleteCompany)
+router.patch('/:id/status', controller.updateStatus)
+router.patch('/:id/update', controller.update)
 
-// company_router.put(
-// 	'/upload-company-plan',
-// 	uploadImage.single('image'),
-// 	companyController.uploadBuildingImage,
-// )
+router.patch('/:id/assign-buildings', controller.assignBuildings)
+router.patch('/:id/unassign-buildings', controller.unassignBuildings)
 
-module.exports = company_router
+router.get('/:id/members', controller.members)
+router.post('/:id/managers', controller.assignManagers)
+router.post(
+	'/:id/buildings/:buildingId/workers',
+	controller.assignWorkersToBuilding,
+)
+
+router.delete('/:id', controller.deleteCompany)
+
+module.exports = router

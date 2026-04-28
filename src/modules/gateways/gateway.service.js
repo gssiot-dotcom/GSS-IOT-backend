@@ -5,18 +5,14 @@ const { logger } = require('../../lib/logger')
 
 const Gateway = require('./gateway.model')
 const NodeSchema = require('../nodes/node.model')
-const { Node } = require('../nodes/door-node/node.model')
-const { AngleNode } = require('../nodes/angle-node/angleNode.model')
-const { VerticalNode } = require('../nodes/vertical-node/Vertical.node.model')
 const { NODE_TYPE } = require('../../lib/config')
+const { BuildingSchema } = require('../building/building.model')
 
 class GatewayService {
 	constructor() {
 		this.gatewaySchema = Gateway
 		this.nodeSchema = NodeSchema
-		this.nodeModel = Node
-		this.angleNodeSchema = AngleNode
-		this.verticalNodeSchema = VerticalNode
+		this.buildingSchema = BuildingSchema
 	}
 
 	createError(message, statusCode = 400) {
@@ -353,6 +349,89 @@ class GatewayService {
 				400,
 			)
 		}
+	}
+
+	async assignGatewayToBuilding(payload = {}) {
+		const { gateway_ids, building_id } = payload
+
+		if (!Array.isArray(gateway_ids) || gateway_ids.length === 0) {
+			throw this.createError('gateway_ids must be a non-empty array', 400)
+		}
+
+		if (!building_id) {
+			throw this.createError('building_id is required', 400)
+		}
+
+		if (!mongoose.Types.ObjectId.isValid(building_id)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		const invalidGatewayId = gateway_ids.find(
+			id => !mongoose.Types.ObjectId.isValid(id),
+		)
+
+		if (invalidGatewayId) {
+			throw this.createError(`Invalid gateway id: ${invalidGatewayId}`, 400)
+		}
+
+		const building = await this.buildingSchema.findById(building_id)
+
+		if (!building) {
+			throw this.createError('Building not found', 404)
+		}
+
+		const gatewaysCount = await this.gatewaySchema.countDocuments({
+			_id: { $in: gateway_ids },
+		})
+
+		if (gatewaysCount !== gateway_ids.length) {
+			throw this.createError('Some gateways were not found', 404)
+		}
+
+		const updateData = {
+			building_id,
+		}
+
+		await this.gatewaySchema.updateMany(
+			{
+				_id: { $in: gateway_ids },
+			},
+			{
+				$set: updateData,
+			},
+		)
+
+		const updatedGateways = await this.gatewaySchema.find({
+			_id: { $in: gateway_ids },
+		})
+
+		return {
+			assigned_count: updatedGateways.length,
+			gateways: updatedGateways,
+		}
+	}
+
+	async unassignGatewayFromBuilding(gatewayId) {
+		if (!mongoose.Types.ObjectId.isValid(gatewayId)) {
+			throw this.createError('Invalid gateway id', 400)
+		}
+
+		const gateway = await this.gatewaySchema.findById(gatewayId)
+		if (!gateway) {
+			throw this.createError('Gateway not found', 404)
+		}
+
+		const updatedGateway = await this.gatewaySchema.findByIdAndUpdate(
+			gatewayId,
+			{
+				$set: {
+					building_id: null,
+				},
+			},
+			{ new: true },
+		)
+
+		return updatedGateway
 	}
 
 	async makeWakeUpOfficeGateway(payload = {}) {

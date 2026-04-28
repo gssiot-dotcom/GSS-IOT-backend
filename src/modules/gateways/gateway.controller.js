@@ -128,6 +128,40 @@ gatewayController.connectNodesToGateway = async (req, res, next) => {
 	}
 }
 
+gatewayController.assignBuilding = async (req, res, next) => {
+	try {
+		logger('request: gateway-assignBuilding')
+
+		const result = await gatewayService.assignGatewayToBuilding(req.body)
+
+		return sendSuccess(res, {
+			message: 'Gateways assigned to building successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+gatewayController.unassignBuilding = async (req, res, next) => {
+	try {
+		logger('request: gateway-unassignBuilding')
+
+		const result = await gatewayService.unassignGatewayFromBuilding(
+			req.params.id,
+		)
+
+		return sendSuccess(res, {
+			message: 'Gateway unassigned from building successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
 gatewayController.makeWakeUpOfficeGateway = async (req, res, next) => {
 	try {
 		logger('request: gateway-makeWakeUpOfficeGateway')
