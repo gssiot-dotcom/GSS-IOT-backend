@@ -4,7 +4,7 @@ const authController = require('./auth.controller')
 // middleware pathni projectingizga moslang
 const { isAuth } = require('../../middlewares/auth.middleware')
 
-router.post('/register', authController.register)
+router.post('/signup', authController.register)
 router.post('/login', authController.login)
 router.post('/logout', isAuth, authController.logout)
 router.get('/me', isAuth, authController.me)

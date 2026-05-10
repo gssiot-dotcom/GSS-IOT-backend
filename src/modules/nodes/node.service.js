@@ -41,32 +41,33 @@ class NodeService {
 	async createNodes(body) {
 		logger('request: createNodes')
 
-		const { node_type, node_numbers } = body
+		const { nodeType, nodeNumbers } = body
 
-		if (!Array.isArray(node_numbers) || node_numbers.length === 0) {
-			throw this.createError('node_numbers must be a non-empty array', 400)
+		if (!Array.isArray(nodeNumbers) || nodeNumbers.length === 0) {
+			throw this.createError('nodeNumbers must be a non-empty array', 400)
 		}
 
-		if (!node_type) {
-			throw this.createError('node_type is required', 400)
+		if (!nodeType) {
+			throw this.createError('nodeType is required', 400)
 		}
 
 		const existNodes = await this.nodeSchema.find({
-			node_number: { $in: node_numbers },
-			node_type,
+			number: { $in: nodeNumbers },
+			nodeType,
 		})
 
 		if (existNodes.length > 0) {
-			const existNodeNums = existNodes.map(node => node.node_number)
+			const existNodeNums = existNodes.map(node => node.number)
+
 			throw this.createError(
 				`노드 번호가 ${existNodeNums.join(',')}인 기존 노드가 있습니다 !`,
 				400,
 			)
 		}
 
-		const arrayObject = node_numbers.map(number => ({
-			node_number: number,
-			node_type,
+		const arrayObject = nodeNumbers.map(number => ({
+			number,
+			nodeType,
 		}))
 
 		const createdNodes = await this.nodeSchema.insertMany(arrayObject)

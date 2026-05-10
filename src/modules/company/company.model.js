@@ -1,50 +1,47 @@
 const mongoose = require('mongoose')
 const { COMPANY_MEMBER_TYPES } = require('../../lib/config')
+const MEMBER_STATUS = { ACTIVE: 'active', INACTIVE: 'inactive' }
+const COMPANY_STATUS = { ACTIVE: 'active', INACTIVE: 'inactive' }
 
 const companySchema = new mongoose.Schema(
 	{
-		company_name: {
+		companyName: {
 			type: String,
 			required: true,
 			trim: true,
 		},
-		company_code: {
+		companyCode: {
 			type: String,
-			default: '',
+			required: false,
 			trim: true,
 		},
-		biz_number: {
+		companyAddress: {
 			type: String,
-			default: '',
+			required: true,
 			trim: true,
 		},
-		company_addr: {
+		companyTel: {
 			type: String,
-			default: '',
-			trim: true,
+			default: null,
 		},
-		company_tel: {
+		companyEmail: {
 			type: String,
-			default: '',
-		},
-		company_email: {
-			type: String,
-			default: '',
+			default: null,
 			trim: true,
 			lowercase: true,
 		},
-		company_logo: {
+		companyLogo: {
 			type: String,
-			default: '',
-		},
-		status: {
-			type: Boolean,
-			default: true,
-		},
-		created_by: {
-			type: mongoose.Schema.ObjectId,
-			ref: 'User',
 			default: null,
+		},
+
+		companyStatus: {
+			type: String,
+			enum: {
+				values: Object.values(COMPANY_STATUS),
+				message: '{VALUE} is not a valid company status',
+			},
+			default: COMPANY_STATUS.ACTIVE,
 		},
 	},
 	{ timestamps: true },
@@ -52,19 +49,19 @@ const companySchema = new mongoose.Schema(
 
 const companyMemberSchema = new mongoose.Schema(
 	{
-		company_id: {
+		companyId: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Company',
 			required: true,
 		},
 
-		user_id: {
+		memberId: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'User',
 			required: true,
 		},
 
-		member_role: {
+		memberRole: {
 			type: String,
 			enum: {
 				values: Object.values(COMPANY_MEMBER_TYPES),
@@ -74,21 +71,25 @@ const companyMemberSchema = new mongoose.Schema(
 		},
 
 		status: {
-			type: Boolean,
-			default: true,
+			type: String,
+			enum: {
+				values: Object.values(MEMBER_STATUS),
+				message: '{VALUE} is not a valid member status',
+			},
+			default: MEMBER_STATUS.ACTIVE,
 		},
 	},
 	{ timestamps: true },
 )
 
-companyMemberSchema.index({ company_id: 1, user_id: 1 }, { unique: true })
+companyMemberSchema.index({ companyId: 1, memberId: 1 }, { unique: true })
 
-companySchema.index({ company_name: 1 })
-companySchema.index({ status: 1 })
+companySchema.index({ companyName: 1 })
+companySchema.index({ companyStatus: 1 })
 
-companyMemberSchema.index({ user_id: 1, company_id: 1 }, { unique: true })
-companyMemberSchema.index({ user_id: 1, status: 1 })
-companyMemberSchema.index({ company_id: 1, status: 1 })
+companyMemberSchema.index({ memberId: 1, companyId: 1 }, { unique: true })
+companyMemberSchema.index({ memberId: 1, companyStatus: 1 })
+companyMemberSchema.index({ companyId: 1, companyStatus: 1 })
 
 const CompanySchema = mongoose.model('Company', companySchema)
 const CompanyMemberSchema = mongoose.model(

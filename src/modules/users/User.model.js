@@ -23,7 +23,7 @@ const userSchema = new Schema(
 			type: String,
 			required: true,
 		},
-		user_type: {
+		userType: {
 			type: String,
 			enum: {
 				values: USER_TYPES,
@@ -31,23 +31,18 @@ const userSchema = new Schema(
 			},
 			required: true,
 		},
-		status: {
+		isAssigned: {
 			type: Boolean,
 			default: true,
-		},
-		last_selected_company_id: {
-			type: Schema.ObjectId,
-			ref: 'Company',
-			default: null,
 		},
 	},
 	{ timestamps: true },
 )
 
-userSchema.index({ user_type: 1, status: 1 })
+userSchema.index({ userType: 1, isAssigned: 1 })
 
 const otpSchema = new Schema({
-	user_email: {
+	userEmail: {
 		type: String,
 		required: true,
 	},

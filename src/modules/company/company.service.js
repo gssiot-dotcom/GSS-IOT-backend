@@ -32,85 +32,34 @@ class CompanyService {
 		session.startTransaction()
 
 		try {
-			const company_name = payload.company_name?.trim()
-			const company_email = this.normalizeEmail(payload.company_email)
-			const created_by = payload.created_by || null
-			const building_ids = Array.isArray(payload.building_ids)
-				? payload.building_ids
-				: []
-			const manager_ids = Array.isArray(payload.manager_ids)
-				? payload.manager_ids
-				: []
+			const companyName = payload.companyName?.trim()
+			const companyAddress = payload.companyAddress?.trim()
+			const companyTel = payload.companyTel?.trim() || null
 
-			if (!company_name) {
-				throw this.createError('company_name is required', 400)
+			if (!companyName) {
+				throw this.createError('companyName is required', 400)
 			}
 
-			if (created_by && !mongoose.Types.ObjectId.isValid(created_by)) {
-				throw this.createError('Invalid created_by id', 400)
+			if (!companyAddress) {
+				throw this.createError('companyAddress is required', 400)
 			}
 
-			for (const buildingId of building_ids) {
-				if (!mongoose.Types.ObjectId.isValid(buildingId)) {
-					throw this.createError(`Invalid building id: ${buildingId}`, 400)
-				}
+			const createdCompany = await this.companySchema.create({
+				companyName,
+				companyAddress,
+				companyTel,
+			})
+
+			if (!createdCompany) {
+				throw this.createError('Failed to create company', 500)
 			}
-
-			for (const managerId of manager_ids) {
-				if (!mongoose.Types.ObjectId.isValid(managerId)) {
-					throw this.createError(`Invalid manager id: ${managerId}`, 400)
-				}
-			}
-
-			const uniqueBuildingIds = [...new Set(building_ids.map(String))]
-			const uniqueManagerIds = [...new Set(manager_ids.map(String))]
-
-			const company = await this.companySchema.create(
-				[
-					{
-						...payload,
-						company_name,
-						company_email,
-						created_by,
-					},
-				],
-				{ session },
-			)
-
-			const createdCompany = company[0]
-
-			if (uniqueManagerIds.length > 0) {
-				const members = uniqueManagerIds.map(userId => ({
-					user_id: userId,
-					company_id: createdCompany._id,
-					member_role: 'MANAGER',
-					status: true,
-				}))
-
-				await this.companyMemberSchema.insertMany(members, { session })
-			}
-
-			if (uniqueBuildingIds.length > 0) {
-				await this.buildingSchema.updateMany(
-					{ _id: { $in: uniqueBuildingIds } },
-					{ $set: { company_id: createdCompany._id } },
-					{ session },
-				)
-			}
-
-			await session.commitTransaction()
-			session.endSession()
 
 			return {
 				company: createdCompany,
-				manager_ids: uniqueManagerIds,
-				building_ids: uniqueBuildingIds,
 			}
 		} catch (error) {
-			await session.abortTransaction()
-			session.endSession()
-
 			if (error.statusCode) throw error
+
 			throw this.createError(error.message || 'Error on creating company', 400)
 		}
 	}

@@ -8,10 +8,7 @@ exports.isAdmin = (req, res, next) => {
 			})
 		}
 
-		if (
-			req.user.user_type !== 'ADMIN' &&
-			req.user.user_type !== 'SUPER_ADMIN'
-		) {
+		if (req.user.userType !== 'admin' && req.user.userType !== 'SUPER_ADMIN') {
 			return res.status(403).json({
 				state: 'error',
 				message: 'Access denied',

@@ -23,10 +23,6 @@ exports.isAuth = async (req, res, next) => {
 			return unauthorized(res, 'User not found')
 		}
 
-		if (!user.status) {
-			return unauthorized(res, 'User account is inactive')
-		}
-
 		req.user = user
 		next()
 	} catch (error) {

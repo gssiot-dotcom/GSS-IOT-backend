@@ -1,42 +1,108 @@
 const mongoose = require('mongoose')
 const { NODE_TYPE } = require('../../lib/config')
+const NODE_STATUS = 'normal' | 'warning' | 'danger' | 'offline'
 
 // ======== Schemas of Model ========== //
 const nodeSchema = new mongoose.Schema(
 	{
-		node_number: {
+		number: {
 			type: Number,
 			required: true,
 		},
-		node_type: {
+
+		nodeType: {
 			type: String,
 			required: true,
 			enum: Object.values(NODE_TYPE),
 		},
-		door_state: { type: Number, default: 0 },
-		battery_state: { type: Number, default: 0 },
-		node_status: { type: Boolean, default: true },
-		position: { type: String, default: '' },
-		angle_x: { type: Number, default: 0 },
-		angle_y: { type: Number, default: 0 },
-		calibrated_x: { type: Number, default: 0 },
-		calibrated_y: { type: Number, default: 0 },
-		node_position_img: { type: String, default: '' },
-		save_status: { type: Boolean, default: true },
-		save_status_lastChange: { type: Date, default: Date.now },
-		gateway_id: {
+
+		companyId: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Company',
+			default: null,
+		},
+
+		gatewayId: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'Gateway',
 			default: null,
 		},
-		node_alive: { type: Boolean, default: true },
-		lastSeen: { type: Date, default: null },
+
+		status: {
+			type: String,
+			enum: Object.values(NODE_STATUS),
+			default: 'normal',
+		},
+
+		installedLocation: {
+			type: String,
+			default: '',
+			trim: true,
+		},
+
+		installLocationImg: {
+			type: String,
+			default: null,
+		},
+
+		isAssigned: {
+			type: Boolean,
+			default: false,
+		},
+
+		doorState: {
+			type: Number,
+			default: 0,
+		},
+
+		batteryLevel: {
+			type: Number,
+			default: 0,
+		},
+
+		angleX: {
+			type: Number,
+			default: 0,
+		},
+
+		angleY: {
+			type: Number,
+			default: 0,
+		},
+
+		calibratedX: {
+			type: Number,
+			default: 0,
+		},
+
+		calibratedY: {
+			type: Number,
+			default: 0,
+		},
+
+		saveStatus: {
+			type: Boolean,
+			default: true,
+		},
+
+		saveStatusLastChange: {
+			type: Date,
+			default: Date.now,
+		},
+
+		lastSeenAt: {
+			type: Date,
+			default: null,
+		},
 	},
 	{ timestamps: true },
 )
 
-nodeSchema.index({ node_number: 1 }, { unique: true })
-nodeSchema.index({ gateway_id: 1, node_type: 1 })
+nodeSchema.index({ number: 1 }, { unique: true })
+nodeSchema.index({ companyId: 1, status: 1 })
+nodeSchema.index({ companyId: 1, gatewayId: 1, nodeType: 1 })
+nodeSchema.index({ gatewayId: 1, nodeType: 1 })
+nodeSchema.index({ status: 1, lastSeen: -1 })
 
 // ============ Exports of schemas ============ //
 

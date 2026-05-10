@@ -3,9 +3,6 @@ const { sendSuccess, sendFail } = require('../../lib/http.response') // pathni m
 const { logError, logger } = require('../../lib/logger')
 const authService = new AuthService()
 
-// sizda custom logger bo'lsa shuni require qiling
-// const { logger, logError } = require('../../lib/logger')
-
 let authController = module.exports
 
 authController.register = async (req, res, next) => {
@@ -15,7 +12,7 @@ authController.register = async (req, res, next) => {
 		authService.setAuthCookie(res, result.token)
 		return sendSuccess(res, {
 			message: 'User registered successfully',
-			data: result.user,
+			data: { user: result.user, accessToken: result.token },
 			statusCode: 201,
 		})
 	} catch (error) {
@@ -32,7 +29,7 @@ authController.login = async (req, res, next) => {
 
 		return sendSuccess(res, {
 			message: 'Login successful',
-			data: result.user,
+			data: { user: result.user, accessToken: result.token },
 			statusCode: 200,
 		})
 	} catch (error) {

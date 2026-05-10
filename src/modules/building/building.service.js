@@ -25,25 +25,32 @@ class BuildingService {
 	}
 
 	async createBuilding(payload = {}) {
-		const building_name = payload.building_name?.trim()
-		const building_addr = payload.building_addr?.trim()
+		const title = payload.title?.trim()
+		const address = payload.address?.trim()
+		const buildingType = payload.buildingType?.trim()
+		const companyId = payload.companyId
 
-		if (!building_name) {
-			throw this.createError('building_name is required', 400)
+		if (!title) {
+			throw this.createError('title is required', 400)
 		}
 
-		if (!building_addr) {
-			throw this.createError('building_addr is required', 400)
+		if (!address) {
+			throw this.createError('address is required', 400)
+		}
+
+		if (!buildingType) {
+			throw this.createError('buildingType is required', 400)
+		}
+
+		if (companyId && !mongoose.Types.ObjectId.isValid(companyId)) {
+			throw this.createError('Invalid companyId', 400)
 		}
 
 		const building = await this.buildingSchema.create({
-			...payload,
-			building_name,
-			building_addr,
-			angle_alarm_level: this.normalizeAlarmLevels(payload.angle_alarm_level),
-			gangform_alarm_level: this.normalizeAlarmLevels(
-				payload.gangform_alarm_level,
-			),
+			title,
+			address,
+			buildingType,
+			companyId: companyId || null,
 		})
 
 		return building

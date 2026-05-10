@@ -119,34 +119,33 @@ class GatewayService {
 	}
 
 	async createGateway(payload = {}) {
-		const serial_number = payload.serial_number?.trim()
-		const gateway_type = payload.gateway_type
-		const zone_name = payload.zone_name?.trim() || ''
+		const serialNumber = payload.serialNumber?.trim()
+		const gatewayType = payload.gatewayType
+		const installedLocation = payload.installedLocation?.trim() || ''
 
-		if (!serial_number) {
-			throw this.createError('serial_number is required', 400)
+		if (!serialNumber) {
+			throw this.createError('serialNumber is required', 400)
 		}
 
-		if (!gateway_type) {
-			throw this.createError('gateway_type is required', 400)
+		if (!gatewayType) {
+			throw this.createError('gatewayType is required', 400)
 		}
 
 		const existingGateway = await this.gatewaySchema.findOne({
-			serial_number,
-			gateway_type,
+			serialNumber: serialNumber,
 		})
 
 		if (existingGateway) {
 			throw this.createError(
-				`일련 번호가 ${existingGateway.serial_number}인 기존 게이트웨이가 있습니다.`,
+				`일련 번호가 ${existingGateway.serialNumber}인 기존 게이트웨이가 있습니다.`,
 				409,
 			)
 		}
 
 		const gateway = await this.gatewaySchema.create({
 			...payload,
-			serial_number,
-			zone_name,
+			serialNumber,
+			installedLocation,
 		})
 
 		return gateway
@@ -207,7 +206,7 @@ class GatewayService {
 		const allowedFields = [
 			'gateway_type',
 			'building_id',
-			'zone_name',
+			'installedLocation',
 			'gateway_status',
 			'gateway_alive',
 		]
@@ -220,9 +219,11 @@ class GatewayService {
 			}
 		}
 
-		if (updateData.zone_name !== undefined) {
-			const normalizedZoneName = this.normalizeZoneName(updateData.zone_name)
-			updateData.zone_name = normalizedZoneName || ''
+		if (updateData.installedLocation !== undefined) {
+			const normalizedInstalledLocation = this.normalizeInstalledLocation(
+				updateData.installedLocation,
+			)
+			updateData.installedLocation = normalizedInstalledLocation || ''
 		}
 
 		if (Object.keys(updateData).length === 0) {
@@ -302,7 +303,7 @@ class GatewayService {
 				)
 			}
 
-			const gw_number = gateway.serial_number
+			const gw_number = gateway.serialNumber
 			const topic = this.buildGatewayTopic(gw_number)
 
 			const publishData = {
@@ -336,7 +337,7 @@ class GatewayService {
 			)
 			return {
 				gateway_id: gateway._id,
-				serial_number: gateway.serial_number,
+				serialNumber: gateway.serialNumber,
 				node_type: config.requestNodeType,
 				db_node_type: config.dbNodeType,
 				connected_count: foundNodes.length,
@@ -436,15 +437,15 @@ class GatewayService {
 
 	async makeWakeUpOfficeGateway(payload = {}) {
 		try {
-			const serial_number = payload.serial_number
+			const serialNumber = payload.serialNumber
 			const alarmActive = payload.alarmActive
 			const alertLevel = payload.alertLevel
 
-			if (!serial_number) {
+			if (!serialNumber) {
 				throw this.createError('gw_number is required', 400)
 			}
 
-			const topic = this.buildGatewayTopic(serial_number)
+			const topic = this.buildGatewayTopic(serialNumber)
 
 			const publishData = {
 				cmd: 3,
@@ -458,7 +459,7 @@ class GatewayService {
 
 			return {
 				topic,
-				serial_number,
+				serialNumber,
 				alarmActive,
 				alertLevel,
 			}

@@ -1,94 +1,142 @@
 const { default: mongoose } = require('mongoose')
+const { ALARM_NODE_TYPES } = require('../../lib/config')
+
+const BUILDING_STATUS = { ACTIVE: 'active', INACTIVE: 'inactive' }
+const MEMBER_STATUS = { ACTIVE: 'active', INACTIVE: 'inactive' }
 
 const buildingSchema = new mongoose.Schema(
 	{
-		building_name: {
+		title: {
 			type: String,
 			required: true,
 			trim: true,
 		},
-		building_num: {
+
+		number: {
 			type: Number,
 			default: null,
 		},
-		building_addr: {
+
+		address: {
 			type: String,
 			required: true,
 			trim: true,
 		},
-		building_plan_img: {
+
+		buildingType: {
 			type: String,
-			default: '',
+			required: true,
+			trim: true,
 		},
-		building_status: {
+
+		buildingPlanImage: {
+			type: [String],
+			default: [],
+			validate: {
+				validator: arr => arr.length <= 4,
+				message: 'buildingPlanImage maximum 4 images allowed',
+			},
+		},
+
+		buildingRealImage: {
+			type: [String],
+			default: [],
+			validate: {
+				validator: arr => arr.length <= 4,
+				message: 'buildingRealImage maximum 4 images allowed',
+			},
+		},
+
+		buildingStatus: {
+			type: String,
+			enum: {
+				values: Object.values(BUILDING_STATUS),
+				message: '{VALUE} is not a valid building status',
+			},
+			default: BUILDING_STATUS.ACTIVE,
+		},
+
+		startDate: {
+			type: Date,
+			default: null,
+		},
+
+		isAssigned: {
 			type: Boolean,
-			default: true,
+			default: false,
 		},
-		permit_date: {
-			type: Date,
-			default: null,
-		},
-		expiry_date: {
-			type: Date,
-			default: null,
-		},
-		company_id: {
+
+		companyId: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'Company',
-			required: false,
-			default: null,
-		},
-		angle_alarm_level: {
-			blue: { type: Number, default: 0 },
-			green: { type: Number, default: 0 },
-			yellow: { type: Number, default: 0 },
-			red: { type: Number, default: 0 },
-		},
-		gangform_alarm_level: {
-			blue: { type: Number, default: 0 },
-			green: { type: Number, default: 0 },
-			yellow: { type: Number, default: 0 },
-			red: { type: Number, default: 0 },
+			required: true,
 		},
 	},
 	{ timestamps: true },
 )
 
+const alarmLevelSchema = new mongoose.Schema(
+	{
+		buildingId: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Building',
+			required: true,
+		},
+		alarmType: {
+			type: String,
+			required: true,
+			enum: {
+				values: Object.values(ALARM_NODE_TYPES),
+				message: '{VALUE} is not a valid alarm type',
+			},
+		},
+		blue: { type: Number, default: 0 },
+		green: { type: Number, default: 0 },
+		yellow: { type: Number, default: 0 },
+		red: { type: Number, default: 0 },
+	},
+	{ _id: false },
+)
+
 const buildingMemberSchema = new mongoose.Schema(
 	{
-		company_id: {
+		companyId: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Company',
 			required: true,
 		},
 
-		building_id: {
+		buildingId: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'Building',
 			required: true,
 		},
 
-		user_id: {
+		userId: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: 'User',
 			required: true,
 		},
 
 		status: {
-			type: Boolean,
-			default: true,
+			type: String,
+			enum: {
+				values: Object.values(MEMBER_STATUS),
+				message: '{VALUE} is not a valid member status',
+			},
+			default: MEMBER_STATUS.ACTIVE,
 		},
 	},
 	{ timestamps: true },
 )
 
 buildingMemberSchema.index(
-	{ company_id: 1, building_id: 1, user_id: 1 },
+	{ companyId: 1, buildingId: 1, userId: 1 },
 	{ unique: true },
 )
 
-buildingSchema.index({ company_id: 1, building_status: 1 })
-buildingSchema.index({ company_id: 1, building_name: 1 })
+buildingSchema.index({ companyId: 1, buildingStatus: 1 })
+buildingSchema.index({ companyId: 1, title: 1 })
 
 const BuildingSchema = mongoose.model('Building', buildingSchema)
 const BuildingWorkerSchema = mongoose.model(
@@ -96,4 +144,13 @@ const BuildingWorkerSchema = mongoose.model(
 	buildingMemberSchema,
 )
 
-module.exports = { BuildingSchema, BuildingWorkerSchema }
+const BuildingAlarmLevelSchema = mongoose.model(
+	'BuildingAlarmLevel',
+	alarmLevelSchema,
+)
+
+module.exports = {
+	BuildingSchema,
+	BuildingWorkerSchema,
+	BuildingAlarmLevelSchema,
+}

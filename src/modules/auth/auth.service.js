@@ -22,7 +22,7 @@ class AuthService {
 			{
 				id: user._id,
 				email: user.email,
-				user_type: user.user_type,
+				userType: user.userType,
 			},
 			process.env.JWT_SECRET_KEY,
 			{
@@ -57,7 +57,7 @@ class AuthService {
 		const email = payload.email?.trim()?.toLowerCase()
 		const password = payload.password
 		const phone = payload.phone || ''
-		const user_type = payload.user_type ?? 'USER'
+		const userType = payload.userType ?? 'user'
 		const profile_img = payload.profile_img || ''
 
 		if (!name) {
@@ -72,7 +72,7 @@ class AuthService {
 			throw this.createError('Password is required', 400)
 		}
 
-		if (!SIGNUP_USER_TYPES.includes(user_type)) {
+		if (!SIGNUP_USER_TYPES.includes(userType)) {
 			throw this.createError('Invalid user type', 400)
 		}
 
@@ -89,7 +89,7 @@ class AuthService {
 			password: hashedPassword,
 			phone,
 			profile_img,
-			user_type,
+			userType: userType,
 		})
 
 		const token = this.generateAccessToken(user)
@@ -119,10 +119,6 @@ class AuthService {
 		const user = await this.userSchema.findOne({ email })
 		if (!user) {
 			throw this.createError('Invalid email or password', 401)
-		}
-
-		if (!user.status) {
-			throw this.createError('Your account is inactive', 403)
 		}
 
 		const isMatch = await bcrypt.compare(password, user.password)

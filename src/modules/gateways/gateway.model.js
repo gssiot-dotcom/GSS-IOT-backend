@@ -1,43 +1,58 @@
 const mongoose = require('mongoose')
 const { gateway_type_enums, GATEWAY_TYPES } = require('../../lib/config')
+const GATEWAY_STATUS = { ONLINE: 'online', OFFLINE: 'offline' }
 
 const gatewaySchema = new mongoose.Schema(
 	{
-		serial_number: {
+		serialNumber: {
 			type: String,
 			required: true,
-			unique: true,
 			trim: true,
 		},
-		gateway_status: {
-			type: Boolean,
-			default: true,
-		},
-		gateway_type: {
+
+		gatewayType: {
 			type: String,
 			required: true,
 			enum: {
-				values: GATEWAY_TYPES,
+				values: Object.values(GATEWAY_TYPES),
 				message: '{VALUE} is not permitted to gateway type',
 			},
-			default: 'GATEWAY',
+			default: GATEWAY_TYPES.NODES,
 		},
-		building_id: {
+
+		isAssigned: {
+			type: Boolean,
+			default: false,
+		},
+
+		companyId: {
 			type: mongoose.Schema.ObjectId,
-			ref: 'Building',
-			required: false,
+			ref: 'Company',
 			default: null,
 		},
-		zone_name: {
+
+		buildingId: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Building',
+			default: null,
+		},
+
+		installedLocation: {
 			type: String,
-			default: '',
+			default: null,
 			trim: true,
 		},
-		gateway_alive: {
-			type: Boolean,
-			default: true,
+
+		gatewayStatus: {
+			type: String,
+			enum: {
+				values: Object.values(GATEWAY_STATUS),
+				message: '{VALUE} is not a valid gateway status',
+			},
+			default: GATEWAY_STATUS.OFFLINE,
 		},
-		lastSeen: {
+
+		lastSeenAt: {
 			type: Date,
 			default: null,
 		},
@@ -45,7 +60,11 @@ const gatewaySchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
-gatewaySchema.index({ building_id: 1, gateway_status: 1 })
+gatewaySchema.index({ serialNumber: 1 }, { unique: true })
+gatewaySchema.index({ companyId: 1, gatewayStatus: 1 })
+gatewaySchema.index({ companyId: 1, buildingId: 1, gatewayStatus: 1 })
+gatewaySchema.index({ buildingId: 1, gatewayStatus: 1 })
+gatewaySchema.index({ gatewayStatus: 1, lastSeenAt: -1 })
 
 const Gateway = mongoose.model('Gateway', gatewaySchema)
 module.exports = Gateway

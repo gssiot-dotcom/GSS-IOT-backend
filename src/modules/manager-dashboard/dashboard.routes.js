@@ -5,7 +5,8 @@ const controller = require('./dashboard.controller')
 
 router.use(isAuth)
 
-router.get('/', controller.dashboard)
+router.get('/dashboard', controller.dashboard)
+router.get('/buildings', controller.buildings)
 
 router.get(
 	'/buildings/:buildingId/nodes/:nodeType',

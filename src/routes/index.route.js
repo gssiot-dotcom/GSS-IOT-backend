@@ -13,6 +13,8 @@ const weather_router = require('../modules/weather/weather.routes')
 const report_router = require('../modules/reports/report.route')
 const alert_router = require('../modules/alertion/alert.route')
 const fileRoutes = require('./file.routes')
+const assetRoutes = require('../modules/assets/asset.routes')
+const admin_router = require('../modules/admin-dashboard/admin.routes')
 
 router.use('/auth', auth_router)
 router.use('/users', user_router)
@@ -26,4 +28,7 @@ router.use('/weather', weather_router)
 router.use('/reports', report_router)
 router.use('/alerts', alert_router)
 router.use('/files', fileRoutes)
+// new routes of image upload aws s3
+router.use('/assets', assetRoutes)
+router.use('/admin', admin_router)
 module.exports = router
