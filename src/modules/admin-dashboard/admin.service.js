@@ -89,7 +89,7 @@ class AdminDashboardService {
 		const managerRole = COMPANY_MEMBER_TYPES.manager
 		const workerRole = COMPANY_MEMBER_TYPES.worker
 
-		const [buildingsList, companyMembersList, gatewaysList, nodesCountAgg] =
+		const [buildingsList, companyMembersList, gatewaysList, nodesStatsAgg] =
 			await Promise.all([
 				this.buildingSchema
 					.find({
@@ -127,7 +127,38 @@ class AdminDashboardService {
 					{
 						$group: {
 							_id: '$companyId',
-							count: { $sum: 1 },
+
+							nodesCount: { $sum: 1 },
+
+							onlineNodesCount: {
+								$sum: {
+									$cond: [
+										{
+											$eq: [
+												{ $toLower: { $ifNull: ['$status', ''] } },
+												'online',
+											],
+										},
+										1,
+										0,
+									],
+								},
+							},
+
+							warningNodesCount: {
+								$sum: {
+									$cond: [
+										{
+											$in: [
+												{ $toLower: { $ifNull: ['$status', ''] } },
+												['warning', 'danger'],
+											],
+										},
+										1,
+										0,
+									],
+								},
+							},
 						},
 					},
 				]),
@@ -155,8 +186,13 @@ class AdminDashboardService {
 		const membersByCompany = groupByCompanyId(companyMembersList)
 		const gatewaysByCompany = groupByCompanyId(gatewaysList)
 
-		const nodesCountByCompany = nodesCountAgg.reduce((acc, item) => {
-			acc[item._id.toString()] = item.count
+		const nodesStatsByCompany = nodesStatsAgg.reduce((acc, item) => {
+			acc[item._id.toString()] = {
+				nodesCount: item.nodesCount || 0,
+				onlineNodesCount: item.onlineNodesCount || 0,
+				warningNodesCount: item.warningNodesCount || 0,
+			}
+
 			return acc
 		}, {})
 
@@ -166,6 +202,11 @@ class AdminDashboardService {
 			const currentBuildingsList = buildingsByCompany[companyId] || []
 			const currentMembersList = membersByCompany[companyId] || []
 			const currentGatewaysList = gatewaysByCompany[companyId] || []
+			const currentNodesStats = nodesStatsByCompany[companyId] || {
+				nodesCount: 0,
+				onlineNodesCount: 0,
+				warningNodesCount: 0,
+			}
 
 			const activeMembers = currentMembersList.filter(
 				member => member.status === MEMBER_STATUS.ACTIVE,
@@ -187,7 +228,10 @@ class AdminDashboardService {
 					managersCount,
 					workersCount,
 					gatewaysCount: currentGatewaysList.length,
-					nodesCount: nodesCountByCompany[companyId] || 0,
+
+					nodesCount: currentNodesStats.nodesCount,
+					onlineNodesCount: currentNodesStats.onlineNodesCount,
+					warningNodesCount: currentNodesStats.warningNodesCount,
 				},
 
 				buildingsList: currentBuildingsList,
@@ -383,7 +427,6 @@ class AdminDashboardService {
 				delete userObject.password
 
 				result = {
-					id: createdUser._id,
 					_id: createdUser._id,
 					companyMemberId: createdCompanyMember._id,
 
@@ -394,6 +437,7 @@ class AdminDashboardService {
 
 					memberRole: createdCompanyMember.memberRole,
 					status: createdCompanyMember.status,
+					isAssigned: createdCompanyMember._id ? true : false,
 
 					checked: true,
 					assigned: true,
@@ -531,7 +575,7 @@ class AdminDashboardService {
 		return this.getCompanyBuildings({ companyId })
 	}
 
-	async getAdminResources({ page, limit, skip }) {
+	async getAdminOrganizationsTabs({ page, limit, skip }) {
 		const [
 			companiesList,
 			companiesTotal,
@@ -648,6 +692,363 @@ class AdminDashboardService {
 				}),
 			},
 		}
+	}
+
+	// ============= Admin Device Service methods ============= //
+
+	escapeRegex(value = '') {
+		return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+	}
+
+	normalizeGateway(gateway) {
+		const status = String(gateway.gatewayStatus || '').toLowerCase()
+
+		return {
+			_id: gateway._id,
+			id: gateway._id,
+
+			serialNumber: gateway.serialNumber,
+			gatewayType: gateway.gatewayType,
+			isAssigned: gateway.isAssigned,
+
+			companyId: gateway.companyId?._id || gateway.companyId || null,
+			companyName: gateway.companyId?.companyName || null,
+
+			buildingId: gateway.buildingId?._id || gateway.buildingId || null,
+			buildingName: gateway.buildingId?.title || null,
+			buildingNumber: gateway.buildingId?.number || null,
+			buildingAddress: gateway.buildingId?.address || null,
+
+			installedLocation: gateway.installedLocation || null,
+			gatewayStatus: gateway.gatewayStatus,
+			isOnline: status === 'online',
+
+			lastSeenAt: gateway.lastSeenAt || null,
+			createdAt: gateway.createdAt,
+			updatedAt: gateway.updatedAt,
+		}
+	}
+
+	normalizeNode(node) {
+		return {
+			_id: node._id,
+			id: node._id,
+
+			number: node.number,
+			nodeType: node.nodeType,
+			companyName: node.companyId?.companyName || null,
+			gatewaySerialNumber: node.gatewayId?.serialNumber || null,
+
+			status: node.status,
+			installedLocation: node.installedLocation || '',
+		}
+	}
+
+	normalizeNumbers(numbers) {
+		if (!Array.isArray(numbers)) {
+			throw createError(400, 'numbers must be an array')
+		}
+
+		const parsed = numbers
+			.map(num => Number(num))
+			.filter(num => Number.isInteger(num) && num > 0)
+
+		const unique = [...new Set(parsed)]
+
+		if (unique.length === 0) {
+			throw createError(400, 'Valid node numbers are required')
+		}
+
+		return unique
+	}
+
+	async getGateways({ search = '' } = {}) {
+		const query = {}
+
+		if (search) {
+			const regex = new RegExp(this.escapeRegex(search), 'i')
+
+			query.$or = [
+				{ serialNumber: regex },
+				{ gatewayType: regex },
+				{ gatewayStatus: regex },
+				{ installedLocation: regex },
+			]
+		}
+
+		const gateways = await this.gatewaySchema
+			.find(query)
+			.populate(
+				'companyId',
+				'companyName companyCode companyAddress companyTel companyEmail companyLogo',
+			)
+			.populate(
+				'buildingId',
+				'title number address buildingType buildingStatus',
+			)
+			.sort({ createdAt: -1 })
+			.lean()
+
+		return gateways.map(this.normalizeGateway)
+	}
+
+	async getNodes({ search = '', nodeType = '' } = {}) {
+		const query = {}
+
+		if (nodeType && nodeType !== '전체') {
+			query.nodeType = nodeType
+		}
+
+		if (search) {
+			const regex = new RegExp(this.escapeRegex(search), 'i')
+			const numberSearch = Number(search)
+
+			query.$or = [
+				{ nodeType: regex },
+				{ status: regex },
+				{ installedLocation: regex },
+			]
+
+			if (Number.isInteger(numberSearch)) {
+				query.$or.push({ number: numberSearch })
+			}
+		}
+
+		const nodes = await this.nodeSchema
+			.find(query)
+			.populate('companyId', 'companyName companyCode')
+			.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+			.sort({ number: 1 })
+			.lean()
+
+		return nodes.map(this.normalizeNode)
+	}
+
+	/**
+	 * Node register tab o‘ng tomondagi table uchun.
+	 * Faqat:
+	 * - isAssigned: false
+	 * - gatewayId: null
+	 *
+	 * Eslatma:
+	 * MongoDB da { gatewayId: null } null va field yo‘q holatlarini ham ushlaydi.
+	 */
+	async getAvailableNodes({ search = '', nodeType = '' } = {}) {
+		const query = {
+			isAssigned: false,
+			gatewayId: null,
+		}
+
+		if (nodeType && nodeType !== '전체') {
+			query.nodeType = nodeType
+		}
+
+		if (search) {
+			const regex = new RegExp(this.escapeRegex(search), 'i')
+			const numberSearch = Number(search)
+
+			query.$or = [
+				{ nodeType: regex },
+				{ status: regex },
+				{ installedLocation: regex },
+			]
+
+			if (Number.isInteger(numberSearch)) {
+				query.$or.push({ number: numberSearch })
+			}
+		}
+
+		const nodes = await this.nodeSchema
+			.find(query)
+			.populate('companyId', 'companyName companyCode')
+			.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+			.sort({ number: 1 })
+			.lean()
+
+		return nodes.map(this.normalizeNode)
+	}
+
+	async checkGatewayBySerialNumber(serialNumber) {
+		if (!serialNumber || !String(serialNumber).trim()) {
+			throw createError(400, 'Gateway serialNumber is required')
+		}
+
+		const gateway = await this.gatewaySchema
+			.findOne({
+				serialNumber: String(serialNumber).trim(),
+			})
+			.populate(
+				'companyId',
+				'companyName companyCode companyAddress companyTel companyEmail companyLogo',
+			)
+			.populate(
+				'buildingId',
+				'title number address buildingType buildingStatus',
+			)
+			.lean()
+
+		if (!gateway) {
+			throw createError(404, 'Gateway not found')
+		}
+
+		return this.normalizeGateway(gateway)
+	}
+
+	async checkAvailableNodes({ nodeType, numbers }) {
+		if (!nodeType) {
+			throw createError(400, 'nodeType is required')
+		}
+
+		const uniqueNumbers = this.normalizeNumbers(numbers)
+
+		const nodes = await this.nodeSchema
+			.find({
+				nodeType,
+				number: { $in: uniqueNumbers },
+				isAssigned: false,
+				gatewayId: null,
+			})
+			.sort({ number: 1 })
+			.lean()
+
+		const foundNumberSet = new Set(nodes.map(node => node.number))
+		const missingNumbers = uniqueNumbers.filter(num => !foundNumberSet.has(num))
+
+		return {
+			ok: missingNumbers.length === 0,
+			requestedCount: uniqueNumbers.length,
+			foundCount: nodes.length,
+			missingNumbers,
+			nodes: nodes.map(this.normalizeNode),
+		}
+	}
+
+	async registerNodesToGateway({
+		gatewayId,
+		gatewaySerialNumber,
+		nodeType,
+		numbers,
+	}) {
+		if (!nodeType) {
+			throw createError(400, 'nodeType is required')
+		}
+
+		const uniqueNumbers = this.normalizeNumbers(numbers)
+
+		const session = await mongoose.startSession()
+
+		try {
+			let result
+
+			await session.withTransaction(async () => {
+				const gatewayQuery = gatewayId
+					? { _id: gatewayId }
+					: { serialNumber: String(gatewaySerialNumber || '').trim() }
+
+				if (!gatewayQuery._id && !gatewayQuery.serialNumber) {
+					throw createError(400, 'gatewayId or gatewaySerialNumber is required')
+				}
+
+				const gateway = await this.gatewaySchema
+					.findOne(gatewayQuery)
+					.session(session)
+
+				if (!gateway) {
+					throw createError(404, 'Gateway not found')
+				}
+
+				const nodes = await this.nodeSchema
+					.find({
+						nodeType,
+						number: { $in: uniqueNumbers },
+						isAssigned: false,
+						gatewayId: null,
+					})
+					.session(session)
+
+				const foundNumberSet = new Set(nodes.map(node => node.number))
+				const missingNumbers = uniqueNumbers.filter(
+					num => !foundNumberSet.has(num),
+				)
+
+				if (missingNumbers.length > 0) {
+					throw createError(
+						409,
+						'Some nodes are not available, already assigned, or nodeType does not match',
+						{ missingNumbers },
+					)
+				}
+
+				const nodeIds = nodes.map(node => node._id)
+
+				const updateResult = await this.nodeSchema.updateMany(
+					{
+						_id: { $in: nodeIds },
+						isAssigned: false,
+						gatewayId: null,
+					},
+					{
+						$set: {
+							gatewayId: gateway._id,
+							companyId: gateway.companyId || null,
+							isAssigned: true,
+						},
+					},
+					{ session },
+				)
+
+				if (updateResult.modifiedCount !== uniqueNumbers.length) {
+					throw createError(
+						409,
+						'Nodes were changed by another request. Please refresh and try again.',
+					)
+				}
+
+				const updatedNodes = await this.nodeSchema
+					.find({
+						_id: { $in: nodeIds },
+					})
+					.populate('companyId', 'companyName companyCode')
+					.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+					.session(session)
+					.lean()
+
+				result = {
+					ok: true,
+					message: `${updatedNodes.length} nodes registered to gateway`,
+					gatewayId: gateway._id,
+					gatewaySerialNumber: gateway.serialNumber,
+					nodes: updatedNodes.map(this.normalizeNode),
+				}
+			})
+
+			return result
+		} finally {
+			await session.endSession()
+		}
+	}
+
+	async getAssignedNodesByGateway(gatewayId) {
+		if (!mongoose.Types.ObjectId.isValid(gatewayId)) {
+			throw createError(400, 'Invalid gatewayId')
+		}
+
+		const gateway = await this.gatewaySchema.findById(gatewayId).lean()
+
+		if (!gateway) {
+			throw createError(404, 'Gateway not found')
+		}
+
+		const nodes = await this.nodeSchema
+			.find({
+				gatewayId,
+			})
+			.populate('companyId', 'companyName')
+			.populate('gatewayId', 'serialNumber')
+			.sort({ number: 1 })
+			.lean()
+
+		return nodes.map(this.normalizeNode)
 	}
 }
 

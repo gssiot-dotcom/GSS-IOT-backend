@@ -249,14 +249,14 @@ class GatewayService {
 				throw this.createError('Invalid gateway id', 400)
 			}
 
-			const { nodeIds = [], node_type } = payload
+			const { nodeIds = [], nodeType } = payload
 
 			if (!Array.isArray(nodeIds) || nodeIds.length === 0) {
 				throw this.createError('nodeIds array is required', 400)
 			}
 
-			if (!node_type) {
-				throw this.createError('node_type is required', 400)
+			if (!nodeType) {
+				throw this.createError('nodeType is required', 400)
 			}
 
 			const gateway = await this.gatewaySchema.findById(gatewayId)
@@ -268,7 +268,7 @@ class GatewayService {
 				)
 			}
 
-			const config = this.resolveNodeConfig(node_type)
+			const config = this.resolveNodeConfig(nodeType)
 
 			const foundNodes = await config.model
 				.find(
@@ -291,7 +291,7 @@ class GatewayService {
 				)
 
 				throw this.createError(
-					`Some nodes not found or node_type is not ${config.nodeType}: ${missingOrWrongType.join(', ')}`,
+					`Some nodes not found or nodeType is not ${config.nodeType}: ${missingOrWrongType.join(', ')}`,
 					404,
 				)
 			}

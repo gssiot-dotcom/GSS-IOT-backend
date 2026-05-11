@@ -65,7 +65,7 @@ const companyMemberSchema = new mongoose.Schema(
 			type: String,
 			enum: {
 				values: Object.values(COMPANY_MEMBER_TYPES),
-				message: '{VALUE} is not permitted for member_role',
+				message: '{VALUE} is not permitted for memberRole',
 			},
 			required: true,
 		},
@@ -82,14 +82,12 @@ const companyMemberSchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
-companyMemberSchema.index({ companyId: 1, memberId: 1 }, { unique: true })
-
 companySchema.index({ companyName: 1 })
 companySchema.index({ companyStatus: 1 })
 
-companyMemberSchema.index({ memberId: 1, companyId: 1 }, { unique: true })
-companyMemberSchema.index({ memberId: 1, companyStatus: 1 })
-companyMemberSchema.index({ companyId: 1, companyStatus: 1 })
+companyMemberSchema.index({ companyId: 1, memberId: 1 }, { unique: true })
+companyMemberSchema.index({ memberId: 1, status: 1 })
+companyMemberSchema.index({ companyId: 1, status: 1 })
 
 const CompanySchema = mongoose.model('Company', companySchema)
 const CompanyMemberSchema = mongoose.model(

@@ -46,14 +46,21 @@ class BuildingService {
 			throw this.createError('Invalid companyId', 400)
 		}
 
-		const building = await this.buildingSchema.create({
+		const createdBuilding = await this.buildingSchema.create({
 			title,
 			address,
 			buildingType,
+			isAssigned: !!companyId,
 			companyId: companyId || null,
 		})
 
-		return building
+		const result = {
+			...createdBuilding.toObject(),
+			checked: true,
+			assigned: true,
+		}
+
+		return result
 	}
 
 	async getBuildings(query = {}) {
