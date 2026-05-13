@@ -7,9 +7,8 @@ const router = express.Router()
 
 // router.use(authMiddleware)
 
-router.post('/upload-url', assetController.createUploadUrl)
-router.post('/save', assetController.saveAsset)
-router.get('/view-url', assetController.getViewUrl)
-router.post('/remove', assetController.removeAsset)
+router.post('/company/upload-url', assetController.createUploadUrl)
+router.post('/company/save', assetController.saveAsset)
+router.post('/company/remove', assetController.removeAsset)
 
 module.exports = router

@@ -59,42 +59,59 @@ router.get(
 	'/buildings-page',
 	adminCompanyController.getAdminCompanyBuildingsPage,
 )
-
 router.get(
 	'/buildings-page/:buildingId/gateways',
 	adminCompanyController.getAdminBuildingGateways,
 )
-
 router.put(
 	'/buildings-page/:buildingId/gateways',
 	adminCompanyController.updateAdminBuildingGateways,
 )
-
 router.get(
 	'/buildings-page/:buildingId/workers',
 	adminCompanyController.getAdminBuildingWorkers,
 )
-
 router.put(
 	'/buildings-page/:buildingId/workers',
 	adminCompanyController.updateAdminBuildingWorkers,
 )
-
 router.post(
 	'/buildings-page/:buildingId/workers',
 	adminCompanyController.createAdminBuildingWorker,
 )
+router.get(
+	'/company/buildings/:buildingId/nodes-page',
+	adminCompanyController.getAdminCompanyBuildingNodesPage,
+)
 
 // ================= Admin Device page routes ==================
-router.get('/gateways', getGateways)
-router.get('/nodes', getNodes)
-router.get('/nodes/available', getAvailableNodes)
+router.get(
+	'/devices/companies/:companyId/gateways',
+	adminCompanyController.getCompanyGateways,
+)
+router.get(
+	'/devices/companies/:companyId/nodes',
+	adminCompanyController.getCompanyNodes,
+)
+router.get(
+	'/devices/companies/:companyId/nodes/available',
+	adminCompanyController.getCompanyAvailableNodes,
+)
 
-router.get('/gateways/check/:serialNumber', checkGateway)
-router.get('/gateways/:gatewayId/nodes', getGatewayNodes)
+// router.get('/gateways/check/:serialNumber', checkGateway)
 
-router.post('/nodes/check', checkNodes)
-router.post('/gateways/:gatewayId/nodes', registerNodesToGateway)
+router.post(
+	'/devices/companies/:companyId/nodes/check',
+	adminCompanyController.checkCompanyAvailableNodes,
+)
+router.post(
+	'/devices/companies/:companyId/gateways/:gatewayId/nodes/register',
+	adminCompanyController.registerCompanyNodesToGateway,
+)
+router.get(
+	'/devices/companies/:companyId/gateways/:gatewayId/nodes',
+	adminCompanyController.getCompanyAssignedNodesByGateway,
+)
 
 // =================== Admin Organization page tab routes ===========
 router.get('/organization-page/companies', getCompanies)

@@ -1,10 +1,6 @@
 const path = require('path')
 const crypto = require('crypto')
-const {
-	PutObjectCommand,
-	GetObjectCommand,
-	DeleteObjectCommand,
-} = require('@aws-sdk/client-s3')
+const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
 const { s3Client, s3Bucket } = require('../../config/s3.config')
@@ -46,12 +42,19 @@ function getFileExtension(fileName, contentType) {
 	throw createAppError('Unsupported file extension', 400)
 }
 
+function buildCompanyFolder(companyId) {
+	return `company-${companyId}`
+}
+
+function buildLogoFileName(ext) {
+	return `logo-${crypto.randomUUID()}.${ext}`
+}
+
 function buildS3Key({ kind, companyId, buildingId, fileName, contentType }) {
 	const ext = getFileExtension(fileName, contentType)
-	const uuid = crypto.randomUUID()
 
 	if (kind === 'companyLogo') {
-		return `companies/${companyId}/logo/${uuid}.${ext}`
+		return `companies/${buildCompanyFolder(companyId)}/logo/${buildLogoFileName(ext)}`
 	}
 
 	if (!buildingId) {
@@ -59,23 +62,27 @@ function buildS3Key({ kind, companyId, buildingId, fileName, contentType }) {
 	}
 
 	if (kind === 'buildingPlanImage') {
-		return `companies/${companyId}/buildings/${buildingId}/plan-images/${uuid}.${ext}`
+		return `companies/${buildCompanyFolder(
+			companyId,
+		)}/buildings/${buildingId}/plan-images/${crypto.randomUUID()}.${ext}`
 	}
 
 	if (kind === 'buildingRealImage') {
-		return `companies/${companyId}/buildings/${buildingId}/real-images/${uuid}.${ext}`
+		return `companies/${buildCompanyFolder(
+			companyId,
+		)}/buildings/${buildingId}/real-images/${crypto.randomUUID()}.${ext}`
 	}
 
 	throw createAppError('Invalid asset kind', 400)
 }
 
 function validateKeyPrefix({ kind, companyId, buildingId, key }) {
-	if (!key || key.includes('..')) {
+	if (!key || key.includes('..') || key.startsWith('/')) {
 		throw createAppError('Invalid S3 key', 400)
 	}
 
 	if (kind === 'companyLogo') {
-		const prefix = `companies/${companyId}/logo/`
+		const prefix = `companies/${buildCompanyFolder(companyId)}/logo/`
 
 		if (!key.startsWith(prefix)) {
 			throw createAppError('Invalid company logo key', 403)
@@ -89,7 +96,9 @@ function validateKeyPrefix({ kind, companyId, buildingId, key }) {
 	}
 
 	if (kind === 'buildingPlanImage') {
-		const prefix = `companies/${companyId}/buildings/${buildingId}/plan-images/`
+		const prefix = `companies/${buildCompanyFolder(
+			companyId,
+		)}/buildings/${buildingId}/plan-images/`
 
 		if (!key.startsWith(prefix)) {
 			throw createAppError('Invalid building plan image key', 403)
@@ -99,7 +108,9 @@ function validateKeyPrefix({ kind, companyId, buildingId, key }) {
 	}
 
 	if (kind === 'buildingRealImage') {
-		const prefix = `companies/${companyId}/buildings/${buildingId}/real-images/`
+		const prefix = `companies/${buildCompanyFolder(
+			companyId,
+		)}/buildings/${buildingId}/real-images/`
 
 		if (!key.startsWith(prefix)) {
 			throw createAppError('Invalid building real image key', 403)
@@ -139,35 +150,30 @@ async function createPresignedPutUrl(payload) {
 	}
 }
 
-async function createPresignedGetUrl(key) {
-	if (!key || key.includes('..')) {
-		throw createAppError('Invalid S3 key', 400)
-	}
-
-	const command = new GetObjectCommand({
-		Bucket: s3Bucket,
-		Key: key,
-	})
-
-	const url = await getSignedUrl(s3Client, command, {
-		expiresIn: Number(process.env.S3_GET_EXPIRES_SECONDS || 900),
-	})
-
-	return { url }
-}
-
 async function saveAssetToDb({ kind, companyId, buildingId, key }) {
 	validateKeyPrefix({ kind, companyId, buildingId, key })
 
 	if (kind === 'companyLogo') {
-		const company = await CompanySchema.findByIdAndUpdate(
-			companyId,
-			{ $set: { companyLogo: key } },
-			{ new: true },
-		)
+		const company = await CompanySchema.findById(companyId)
 
 		if (!company) {
 			throw createAppError('Company not found', 404)
+		}
+
+		const oldLogoKey = company.companyLogo
+
+		company.companyLogo = key
+		await company.save()
+
+		if (oldLogoKey && oldLogoKey !== key) {
+			try {
+				await deleteObjectFromS3(oldLogoKey)
+			} catch (error) {
+				console.error('Failed to delete old company logo from S3:', {
+					oldLogoKey,
+					error,
+				})
+			}
 		}
 
 		return company
@@ -251,7 +257,7 @@ async function removeAssetFromDb({ kind, companyId, buildingId, key }) {
 }
 
 async function deleteObjectFromS3(key) {
-	if (!key || key.includes('..')) {
+	if (!key || key.includes('..') || key.startsWith('/')) {
 		throw createAppError('Invalid S3 key', 400)
 	}
 
@@ -267,7 +273,6 @@ async function deleteObjectFromS3(key) {
 
 module.exports = {
 	createPresignedPutUrl,
-	createPresignedGetUrl,
 	saveAssetToDb,
 	removeAssetFromDb,
 	deleteObjectFromS3,

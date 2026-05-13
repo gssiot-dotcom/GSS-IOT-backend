@@ -233,11 +233,12 @@ adminDashboardController.getAssigningResources = async (req, res) => {
 	}
 }
 
-// ========= Admin Device controllers ==========
+// ========= Admin Device page controllers ==========
 
-adminDashboardController.getGateways = async (req, res) => {
+adminDashboardController.getCompanyGateways = async (req, res) => {
 	try {
-		const data = await adminDashboardService.getGateways({
+		const data = await adminDashboardService.getCompanyGateways({
+			companyId: req.params.companyId,
 			search: req.query.search,
 		})
 
@@ -251,27 +252,10 @@ adminDashboardController.getGateways = async (req, res) => {
 	}
 }
 
-adminDashboardController.getGatewayNodes = async (req, res) => {
+adminDashboardController.getCompanyNodes = async (req, res) => {
 	try {
-		const { gatewayNumber } = req.params
-
-		const data = await adminDashboardService.getAssignedNodesByGateway(
-			req.params.gatewayId,
-		)
-
-		return sendSuccess(res, {
-			message: 'Gateway nodes fetched successfully',
-			data,
-			statusCode: 200,
-		})
-	} catch (error) {
-		return sendFail(res, error)
-	}
-}
-
-adminDashboardController.getNodes = async (req, res) => {
-	try {
-		const data = await adminDashboardService.getNodes({
+		const data = await adminDashboardService.getCompanyNodes({
+			companyId: req.params.companyId,
 			search: req.query.search,
 			nodeType: req.query.nodeType,
 		})
@@ -286,9 +270,10 @@ adminDashboardController.getNodes = async (req, res) => {
 	}
 }
 
-adminDashboardController.getAvailableNodes = async (req, res) => {
+adminDashboardController.getCompanyAvailableNodes = async (req, res) => {
 	try {
-		const data = await adminDashboardService.getAvailableNodes({
+		const data = await adminDashboardService.getCompanyAvailableNodes({
+			companyId: req.params.companyId,
 			search: req.query.search,
 			nodeType: req.query.nodeType,
 		})
@@ -303,27 +288,12 @@ adminDashboardController.getAvailableNodes = async (req, res) => {
 	}
 }
 
-adminDashboardController.checkGateway = async (req, res) => {
-	try {
-		const data = await adminDashboardService.checkGatewayBySerialNumber(
-			req.params.serialNumber,
-		)
-
-		return sendSuccess(res, {
-			message: 'Gateway checked successfully',
-			data,
-			statusCode: 200,
-		})
-	} catch (error) {
-		return sendError(res, error)
-	}
-}
-
-adminDashboardController.checkNodes = async (req, res) => {
+adminDashboardController.checkCompanyAvailableNodes = async (req, res) => {
 	try {
 		const { nodeNumbers } = req.body
 
-		const data = await adminDashboardService.checkAvailableNodes({
+		const data = await adminDashboardService.checkCompanyAvailableNodes({
+			companyId: req.params.companyId,
 			nodeType: req.body.nodeType,
 			numbers: req.body.numbers,
 		})
@@ -338,9 +308,10 @@ adminDashboardController.checkNodes = async (req, res) => {
 	}
 }
 
-adminDashboardController.registerNodesToGateway = async (req, res) => {
+adminDashboardController.registerCompanyNodesToGateway = async (req, res) => {
 	try {
-		const data = await adminDashboardService.registerNodesToGateway({
+		const data = await adminDashboardService.registerCompanyNodesToGateway({
+			companyId: req.params.companyId,
 			gatewayId: req.params.gatewayId,
 			nodeType: req.body.nodeType,
 			numbers: req.body.numbers,
@@ -356,7 +327,44 @@ adminDashboardController.registerNodesToGateway = async (req, res) => {
 	}
 }
 
+adminDashboardController.getCompanyAssignedNodesByGateway = async (
+	req,
+	res,
+) => {
+	try {
+		const data = await adminDashboardService.getCompanyAssignedNodesByGateway({
+			companyId: req.params.companyId,
+			gatewayId: req.params.gatewayId,
+		})
+
+		return sendSuccess(res, {
+			message: 'Gateway nodes fetched successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+// adminDashboardController.checkGateway = async (req, res) => {
+// 	try {
+// 		const data = await adminDashboardService.checkGatewayBySerialNumber(
+// 			req.params.serialNumber,
+// 		)
+
+// 		return sendSuccess(res, {
+// 			message: 'Gateway checked successfully',
+// 			data,
+// 			statusCode: 200,
+// 		})
+// 	} catch (error) {
+// 		return sendError(res, error)
+// 	}
+// }
+
 // ========= Admin Organization controllers ==========
+
 adminDashboardController.getCompanies = async (req, res) => {
 	try {
 		const { page, limit, skip } = getPaginationQuery(req.query)
@@ -688,6 +696,28 @@ adminDashboardController.createAdminBuildingWorker = async (req, res, next) => {
 
 		return sendSuccess(res, {
 			message: 'Company Buildings page called successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+adminDashboardController.getAdminCompanyBuildingNodesPage = async (
+	req,
+	res,
+) => {
+	try {
+		const data =
+			await adminCompanyBuildingsService.getAdminCompanyBuildingNodesPage({
+				companyId: req.query.companyId,
+				buildingId: req.params.buildingId,
+				nodeType: req.query.nodeType,
+			})
+
+		return sendSuccess(res, {
+			message: 'Company Building Nodes page called successfully',
 			data,
 			statusCode: 200,
 		})

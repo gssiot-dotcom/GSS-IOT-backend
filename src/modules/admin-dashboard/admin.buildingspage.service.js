@@ -631,7 +631,7 @@ class AdminBuildingsService {
 			companyId: targetCompanyId,
 			memberId: createdUser._id,
 			memberRole: COMPANY_MEMBER_TYPES.worker,
-			status: MEMBER_STATUS.INACTIVE,
+			status: COMPANY_STATUS.ACTIVE,
 		})
 
 		return {
@@ -640,8 +640,8 @@ class AdminBuildingsService {
 			email: createdUser.email,
 			phone: createdUser.phone,
 			userType: createdUser.userType,
-			checked: false,
-			assignedBuildingId: null,
+			checked: true,
+			assignedBuildingId: buildingId,
 		}
 	}
 
@@ -774,6 +774,75 @@ class AdminBuildingsService {
 			nodesList,
 			gatewaysList,
 			alarmLevels,
+		}
+	}
+
+	async getAdminCompanyBuildingNodesPage({ companyId, buildingId, nodeType }) {
+		this.checkObjectId(companyId, 'companyId')
+		this.checkObjectId(buildingId, 'buildingId')
+
+		if (!nodeType) {
+			throw this.createError(400, 'nodeType is required')
+		}
+
+		const targetCompanyId = companyId
+		const targetBuildingId = buildingId
+
+		const building = await this.buildingSchema
+			.findOne({
+				_id: targetBuildingId,
+				companyId: targetCompanyId,
+			})
+			.lean()
+
+		if (!building) {
+			throw this.createError(404, 'Building not found')
+		}
+
+		const [gatewayList, buildingAlarmLevel] = await Promise.all([
+			this.gatewaySchema
+				.find({
+					companyId: targetCompanyId,
+					buildingId: targetBuildingId,
+					isAssigned: true,
+				})
+				.sort({ createdAt: -1 })
+				.lean(),
+
+			this.alarmLevelSchema
+				.findOne({
+					buildingId: targetBuildingId,
+					alarmType: nodeType,
+				})
+				.lean(),
+		])
+
+		const gatewayIds = gatewayList.map(gateway => gateway._id)
+
+		const nodesList = gatewayIds.length
+			? await this.nodeSchema
+					.find({
+						companyId: targetCompanyId,
+						gatewayId: { $in: gatewayIds },
+						nodeType,
+						isAssigned: true,
+					})
+					.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+					.sort({ number: 1 })
+					.lean()
+			: []
+
+		return {
+			nodesList,
+			gatewayList,
+			buildingAlarmLevel: buildingAlarmLevel || {
+				buildingId: targetBuildingId,
+				alarmType: nodeType,
+				blue: 0,
+				green: 0,
+				yellow: 0,
+				red: 0,
+			},
 		}
 	}
 }

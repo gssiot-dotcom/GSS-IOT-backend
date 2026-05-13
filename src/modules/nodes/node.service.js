@@ -68,6 +68,7 @@ class NodeService {
 		const arrayObject = nodeNumbers.map(number => ({
 			number,
 			nodeType,
+			status: 'offline',
 		}))
 
 		const createdNodes = await this.nodeSchema.insertMany(arrayObject)

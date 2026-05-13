@@ -47,24 +47,6 @@ async function saveAsset(req, res, next) {
 	}
 }
 
-async function getViewUrl(req, res, next) {
-	try {
-		const key = req.query.key
-
-		if (!key) {
-			return res.status(400).json({
-				message: 'key is required',
-			})
-		}
-
-		const result = await assetService.createPresignedGetUrl(key)
-
-		return res.status(200).json(result)
-	} catch (error) {
-		next(error)
-	}
-}
-
 async function removeAsset(req, res, next) {
 	try {
 		const { kind, companyId, buildingId, key, deleteFromS3 = false } = req.body
@@ -95,6 +77,11 @@ async function removeAsset(req, res, next) {
 module.exports = {
 	createUploadUrl,
 	saveAsset,
-	getViewUrl,
+	removeAsset,
+}
+
+module.exports = {
+	createUploadUrl,
+	saveAsset,
 	removeAsset,
 }
