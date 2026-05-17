@@ -7,6 +7,7 @@ const GatewaySchema = require('../../gateways/gateway.model')
 const { eventBus } = require('../../../shared/eventBus')
 const { logger, logError } = require('../../../lib/logger')
 const { checkAndLogAngle } = require('../../../services/Alert.service') // sizdagi pathga moslang
+const NodeSchema = require('../node.model')
 // const { getGatewayContextByLast4 } = require('../../../cache/gatewayContext')
 // const { persistQueue } = require('../../../utils/ConcurrencyQueue')
 // const {
@@ -122,55 +123,83 @@ async function deleteAngleNodeData(nodeId) {
 	}
 }
 
-async function handleAngleNodeMqttMessage({ data, gatewayNumberLast4 }) {
-	logger('ANG-Node MPU-sensor data:', data, gatewayNumberLast4)
-	const now = new Date()
+async function handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 }) {
+	const { doorNum, angle_x, angle_y, nodeType } = data
 
-	const ctx = await getGatewayContextByLast4(gatewayNumberLast4)
-	if (!ctx) return
+	if (doorNum == null || angle_x == null) {
+		logError('handleAngleNodeMqttMessage: missing required fields', data)
+		return
+	}
 
-	const { gateway_id, buildingId, gateway_type, gw_position } = ctx
-	const eventName =
-		gateway_type === 'VERTICAL_NODE_GATEWAY' ? 'rt.vertical' : 'rt.angle'
+	// 1. Gateway topish (last4 orqali)
+	const gateway = await GatewaySchema.findOne({
+		serialNumber: { $regex: `${gatewayNumberLast4}$` },
+	}).lean()
 
-	const doorNum = data.doorNum
-	const rawX = Number(data.angle_x ?? 0)
-	const rawY = Number(data.angle_y ?? 0)
+	if (!gateway) {
+		logError(
+			'handleAngleNodeMqttMessage: gateway not found',
+			gatewayNumberLast4,
+		)
+		return
+	}
 
-	// realtime: cache offset bo‘lsa tez hisobla, bo‘lmasa raw bilan ketadi
-	const { calibratedX, calibratedY } = getCalibratedFromCache(
-		doorNum,
-		rawX,
-		rawY,
+	// 2. Node topish va angleX/Y yangilash
+	const node = await NodeSchema.findOneAndUpdate(
+		{
+			gatewayId: gateway._id,
+			number: doorNum,
+		},
+		{
+			$set: {
+				angleX: angle_x,
+				angleY: angle_y ?? 0,
+				lastSeenAt: new Date(),
+				saveStatus: normal,
+			},
+		},
+		{ new: true },
 	)
 
-	// ✅ realtime emit (DBsiz)
-	eventBus.emit(eventName, {
-		doorNum,
-		gw_number: gatewayNumberLast4,
-		gateway_id,
-		buildingId,
-		angle_x: calibratedX,
-		angle_y: calibratedY,
-		gw_position,
-		lastSeen: now,
+	if (!node) {
+		logError('handleAngleNodeMqttMessage: node not found', {
+			gatewayNumberLast4,
+			doorNum,
+		})
+		return
+	}
+
+	logger('handleAngleNodeMqttMessage: node updated', {
+		nodeId: node._id,
+		angleX: angle_x,
+		angleY: angle_y,
 	})
 
-	// ✅ background persist
-	persistQueue.add(() =>
-		persistAngleStuff({
-			now,
+	// 3. Socket orqali frontendga yuborish (tez, history kutmasdan)
+	if (node.buildingId) {
+		eventBus.emit('rt.angle', {
+			buildingId: node.buildingId.toString(),
+			nodeId: node._id,
+			nodeNumber: node.number,
+			angleX: angle_x,
+			angleY: angle_y ?? 0,
 			doorNum,
-			gw_number: gatewayNumberLast4,
-			gateway_id,
-			buildingId,
-			gw_position,
-			rawX,
-			rawY,
-			calibratedX,
-			calibratedY,
-		}),
-	)
+		})
+	}
+
+	// 4. Tarixga saqlash
+	await AngleNodeHistory.create({
+		gwNumber: gateway.number,
+		nodeNumber: doorNum,
+		angleX: angle_x,
+		angleY: angle_y ?? 0,
+	})
+
+	logger('handleAngleNodeMqttMessage: history saved', {
+		doorNum,
+		angle_x,
+		angle_y,
+	})
 }
 
 /**

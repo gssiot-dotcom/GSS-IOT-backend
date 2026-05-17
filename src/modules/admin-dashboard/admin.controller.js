@@ -310,7 +310,7 @@ adminDashboardController.checkCompanyAvailableNodes = async (req, res) => {
 
 adminDashboardController.registerCompanyNodesToGateway = async (req, res) => {
 	try {
-		const data = await adminDashboardService.registerCompanyNodesToGateway({
+		const data = await adminDashboardService.registerCompanyNodesToGatewayMqtt({
 			companyId: req.params.companyId,
 			gatewayId: req.params.gatewayId,
 			nodeType: req.body.nodeType,

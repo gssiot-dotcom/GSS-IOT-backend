@@ -2,66 +2,85 @@ const { VerticalNode, VerticalNodeHistory } = require('./Vertical.node.model')
 const GatewaySchema = require('../../gateways/gateway.model')
 const BuildingSchema = require('../../building/building.model')
 const { eventBus } = require('../../../shared/eventBus')
-const { logger } = require('../../../lib/logger')
+const { logger, logError } = require('../../../lib/logger')
+const NodeSchema = require('../node.model')
 
-const handleVerticalNodeMqttMessage = async ({ data, gatewayNumberLast4 }) => {
-	const now = new Date()
-	const timeString = now.toLocaleString('ko-KR', {
-		timeZone: 'Asia/Seoul',
-		hour12: false,
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit',
-		hour: '2-digit',
-		minute: '2-digit',
-	})
+async function handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 }) {
+	const { doorNum, angle_x, angle_y } = data
 
-	logger('Vertical-Node mqtt message:', data, '|', timeString)
-
-	const eventData = {
-		gw_number: gatewayNumberLast4,
-		node_number: data.doorNum,
-		angle_x: data.angle_x,
-		angle_y: data.angle_y,
+	if (doorNum == null || angle_x == null) {
+		logError('handleVerticalNodeMqttMessage: missing required fields', data)
+		return
 	}
 
-	const updateData = {
-		angle_x: data.angle_x,
-		angle_y: data.angle_y,
+	// 1. Gateway topish
+	const gateway = await GatewaySchema.findOne({
+		serialNumber: { $regex: `${gatewayNumberLast4}$` },
+	}).lean()
+
+	if (!gateway) {
+		logError(
+			'handleVerticalNodeMqttMessage: gateway not found',
+			gatewayNumberLast4,
+		)
+		return
 	}
 
-	const buildingId = await GatewaySchema.findOne({
-		serial_number: gatewayNumberLast4,
-	}).then(gateway => gateway?.building_id)
-
-	const realTimeData = {
-		buildingId: buildingId?.toString(),
-		gw_number: gatewayNumberLast4,
-		node_number: data.doorNum,
-		angle_x: data.angle_x,
-		angle_y: data.angle_y,
-	}
-
-	// 🔥 endi mqttEmitter emas, eventBus:
-	eventBus.emit('rt.vertical', realTimeData)
-
-	const updatedNode = await VerticalNode.findOneAndUpdate(
-		{ node_number: data.doorNum },
-		{ $set: updateData },
+	// 2. Node topish va angleX/Y yangilash
+	const node = await NodeSchema.findOneAndUpdate(
+		{
+			gatewayId: gateway._id,
+			number: doorNum,
+		},
+		{
+			$set: {
+				angleX: angle_x,
+				angleY: angle_y ?? 0,
+				lastSeenAt: new Date(),
+			},
+		},
 		{ new: true },
 	)
 
-	if (!updatedNode) {
-		logInfo('Node를 찾을 수 없음:', data.doorNum)
+	if (!node) {
+		logError('handleVerticalNodeMqttMessage: node not found', {
+			gatewayNumberLast4,
+			doorNum,
+		})
 		return
 	}
 
-	try {
-		await new VerticalNodeHistory(eventData).save()
-	} catch (err) {
-		logError('VerticalNodesHistory 저장 오류:', err.message)
-		return
+	logger('handleVerticalNodeMqttMessage: node updated', {
+		nodeId: node._id,
+		angleX: angle_x,
+		angleY: angle_y,
+	})
+
+	// 3. Socket orqali frontendga yuborish
+	if (gateway.buildingId) {
+		eventBus.emit('rt.vertical', {
+			buildingId: gateway.buildingId.toString(),
+			nodeId: node._id,
+			nodeNumber: node.number,
+			angleX: angle_x,
+			angleY: angle_y ?? 0,
+			doorNum,
+		})
 	}
+
+	// 4. Tarixga saqlash
+	await VerticalNodeHistory.create({
+		gwNumber: gateway.serialNumber,
+		nodeNumber: doorNum,
+		angleX: angle_x,
+		angleYy: angle_y ?? 0, // schemadagi typo saqlab qolindi
+	})
+
+	logger('handleVerticalNodeMqttMessage: history saved', {
+		doorNum,
+		angle_x,
+		angle_y,
+	})
 }
 
 class VerticalNodeService {
@@ -203,25 +222,25 @@ class VerticalNodeService {
 	}
 
 	async updateLocation(node_number, position, floor) {
-	try {
-		const updatedNode = await this.verticalNodeSchema.findOneAndUpdate(
-			{ node_number: Number(node_number) },
-			{
-				position,
-				floor,
-			},
-			{ new: true },
-		)
+		try {
+			const updatedNode = await this.verticalNodeSchema.findOneAndUpdate(
+				{ node_number: Number(node_number) },
+				{
+					position,
+					floor,
+				},
+				{ new: true },
+			)
 
-		if (!updatedNode) {
-			throw new Error('Not Found')
+			if (!updatedNode) {
+				throw new Error('Not Found')
+			}
+
+			return updatedNode
+		} catch (error) {
+			throw new Error(`Error: ${error.message}`)
 		}
-
-		return updatedNode
-	} catch (error) {
-		throw new Error(`Error: ${error.message}`)
 	}
-}
 }
 
 module.exports = { VerticalNodeService, handleVerticalNodeMqttMessage }

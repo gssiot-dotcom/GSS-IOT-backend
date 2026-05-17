@@ -14,11 +14,15 @@ const {
 	COMPANY_MEMBER_TYPES,
 	MEMBER_STATUS,
 	BUILDING_STATUS,
+	NODE_TYPE,
 } = require('../../lib/config')
 const { buildPaginationMeta } = require('../../utils/pagination')
 const { default: mongoose } = require('mongoose')
 const { UserSchema } = require('../users/user.model')
 const bcrypt = require('bcryptjs')
+const { getMqttClient } = require('../../infrastructure/mqtt')
+const { eventBus } = require('../../shared/eventBus')
+const { logger } = require('../../lib/logger')
 
 class AdminDashboardService {
 	constructor() {
@@ -1092,6 +1096,104 @@ class AdminDashboardService {
 
 	// ========================= Company device management page services ===================
 
+	resolveNodeConfig(nodeType) {
+		const input = String(nodeType || '').trim()
+
+		// "gangform_node" => "GANGFORM",  "GANGFORM" => "GANGFORM"
+		const reverseMap = {
+			[NODE_TYPE.DOOR]: 'DOOR', // 'door_node' => 'DOOR'
+			[NODE_TYPE.ANGLE]: 'ANGLE', // 'angle_node' => 'ANGLE'
+			[NODE_TYPE.GANGFORM]: 'GANGFORM', // 'gangform_node' => 'GANGFORM'
+		}
+
+		const key = reverseMap[input] || input.toUpperCase()
+
+		const configMap = {
+			DOOR: {
+				dbNodeType: NODE_TYPE.DOOR,
+				publishNodeType: 0,
+			},
+			ANGLE: {
+				dbNodeType: NODE_TYPE.ANGLE,
+				publishNodeType: 1,
+			},
+			GANGFORM: {
+				dbNodeType: NODE_TYPE.GANGFORM,
+				publishNodeType: 2,
+			},
+		}
+
+		const config = configMap[key]
+
+		if (!config) {
+			throw this.createError(
+				'Invalid nodeType. Allowed values: DOOR, ANGLE, GANGFORM, door_node, angle_node, gangform_node',
+				400,
+			)
+		}
+
+		return {
+			requestNodeType: key,
+			dbNodeType: config.dbNodeType,
+			publishNodeType: config.publishNodeType,
+			model: this.nodeSchema,
+		}
+	}
+
+	buildGatewayTopic(serialNumber) {
+		return `GSSIOT/01030369081/GATE_SUB/GRM22JU22P${serialNumber}`
+	}
+
+	async publishAsync(topic, payload) {
+		logger('Publishing to MQTT:', { topic, payload })
+
+		const mqttClient = getMqttClient()
+
+		if (!mqttClient || !mqttClient.connected) {
+			throw this.createError(
+				'MQTT client is not connected (initMqtt called?)',
+				500,
+			)
+		}
+
+		return new Promise((resolve, reject) => {
+			mqttClient.publish(topic, JSON.stringify(payload), err => {
+				if (err) reject(err)
+				else resolve(true)
+			})
+		})
+	}
+
+	waitForGatewayResponse({ gw_number, timeoutMs = 10000 }) {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => {
+				cleanup()
+				reject(this.createError('MQTT response timeout', 504))
+			}, timeoutMs)
+
+			const handler = payload => {
+				logger('Received MQTT response:', payload)
+
+				if (String(payload?.gw_number) !== String(gw_number)) return
+
+				cleanup()
+
+				if (payload?.data?.resp === 'success') {
+					resolve(true)
+				} else {
+					reject(this.createError('Failed publishing for gateway to mqtt', 400))
+				}
+			}
+
+			const cleanup = () => {
+				clearTimeout(timer)
+				eventBus.removeListener('gateway.response', handler)
+			}
+
+			eventBus.on('gateway.response', handler)
+		})
+	}
+
 	toObjectId(id, fieldName = 'id') {
 		if (!mongoose.Types.ObjectId.isValid(id)) {
 			throw createError(400, `Invalid ${fieldName}`)
@@ -1136,8 +1238,6 @@ class AdminDashboardService {
 
 	async getCompanyNodes({ companyId, search = '', nodeType = '' } = {}) {
 		const companyObjectId = this.toObjectId(companyId, 'companyId')
-
-		console.log('COMPANYID:', companyId, nodeType)
 
 		const query = {
 			companyId: companyObjectId,
@@ -1355,6 +1455,133 @@ class AdminDashboardService {
 			})
 
 			return result
+		} finally {
+			await session.endSession()
+		}
+	}
+
+	async registerCompanyNodesToGatewayMqtt({
+		companyId,
+		gatewayId,
+		gatewaySerialNumber,
+		nodeType,
+		numbers,
+	}) {
+		const companyObjectId = this.toObjectId(companyId, 'companyId')
+
+		if (!nodeType) throw this.createError('nodeType is required', 400)
+
+		const uniqueNumbers = this.normalizeNumbers(numbers)
+
+		// --- 1. BOSQICH: Validate (transaction) ---
+		const { gateway, nodes } = await this._validateAndFetchForRegistration({
+			companyObjectId,
+			gatewayId,
+			gatewaySerialNumber,
+			nodeType,
+			uniqueNumbers,
+		})
+
+		// --- 2. BOSQICH: MQTT ---
+		const config = this.resolveNodeConfig(nodeType)
+		const topic = this.buildGatewayTopic(gateway.serialNumber)
+
+		const publishData = {
+			cmd: 2,
+			nodeType: config.publishNodeType,
+			numNodes: nodes.length,
+			nodes: nodes.map(n => n.number),
+		}
+
+		const waitPromise = this.waitForGatewayResponse({
+			gw_number: gateway.serialNumber,
+			timeoutMs: 10000,
+		})
+
+		await this.publishAsync(topic, publishData)
+		await waitPromise
+
+		// --- 3. BOSQICH: DB update ---
+		const nodeIds = nodes.map(n => n._id)
+
+		const updateResult = await this.nodeSchema.updateMany(
+			{ _id: { $in: nodeIds }, companyId: companyObjectId, gatewayId: null },
+			{ $set: { gatewayId: gateway._id, companyId: companyObjectId } },
+		)
+
+		if (updateResult.modifiedCount !== uniqueNumbers.length) {
+			throw this.createError(
+				'Nodes were changed by another request. Please refresh and try again.',
+				409,
+			)
+		}
+
+		const updatedNodes = await this.nodeSchema
+			.find({ _id: { $in: nodeIds } })
+			.populate('companyId', 'companyName companyCode')
+			.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+			.lean()
+
+		return {
+			ok: true,
+			message: `${updatedNodes.length} nodes registered to gateway`,
+			companyId,
+			gatewayId: gateway._id,
+			gatewaySerialNumber: gateway.serialNumber,
+			nodes: updatedNodes.map(this.normalizeNode),
+		}
+	}
+
+	// Yordamchi: faqat validation va fetch
+	async _validateAndFetchForRegistration({
+		companyObjectId,
+		gatewayId,
+		gatewaySerialNumber,
+		nodeType,
+		uniqueNumbers,
+	}) {
+		const session = await mongoose.startSession()
+		try {
+			let gateway, nodes
+
+			await session.withTransaction(async () => {
+				const gatewayQuery = gatewayId
+					? {
+							_id: this.toObjectId(gatewayId, 'gatewayId'),
+							companyId: companyObjectId,
+						}
+					: {
+							serialNumber: String(gatewaySerialNumber || '').trim(),
+							companyId: companyObjectId,
+						}
+
+				gateway = await this.gatewaySchema
+					.findOne(gatewayQuery)
+					.session(session)
+				if (!gateway)
+					throw this.createError('Gateway not found for this company', 404)
+
+				nodes = await this.nodeSchema
+					.find({
+						companyId: companyObjectId,
+						nodeType,
+						number: { $in: uniqueNumbers },
+						gatewayId: null,
+					})
+					.session(session)
+
+				const foundSet = new Set(nodes.map(n => n.number))
+				const missing = uniqueNumbers.filter(num => !foundSet.has(num))
+
+				if (missing.length > 0) {
+					throw this.createError(
+						'Some nodes are not available for this company, already assigned, or nodeType does not match',
+						409,
+					)
+				}
+			})
+
+			return { gateway, nodes }
 		} finally {
 			await session.endSession()
 		}

@@ -1,6 +1,8 @@
 // services/Heartbeat.service.js
 const GatewaySchema = require('../modules/gateways/gateway.model')
 const { AngleNode } = require('../modules/nodes/angle-node/angleNode.model')
+const NodeSchema = require('../modules/nodes/node.model')
+const GATEWAY_STATUS = { ONLINE: 'online', OFFLINE: 'offline' }
 
 // ===== Loop sikl bo'lib har 10 minutda bir marttadan db ni tekshiradi. agar oxirgi kelgan data kelganiga 1 soatdan oshgan bo'lsa product-status ni false qiladi. bu esa product bilan connection uzilganini bildiradi.
 
@@ -18,25 +20,27 @@ function startHeartbeatJob({
 		// endi lastSeen < cutoff bo‘lgan gateway larni false qilamiz, >= bo‘lsa true (ikkinchi query ixtiyoriy)
 		await GatewaySchema.updateMany(
 			{
-				$or: [{ lastSeen: { $exists: false } }, { lastSeen: { $lt: cutoff } }],
+				$or: [
+					{ lastSeenAt: { $exists: false } },
+					{ lastSeenAt: { $lt: cutoff } },
+				],
 			},
-			{ $set: { gateway_alive: false } },
+			{ $set: { gatewayStatus: GATEWAY_STATUS.OFFLINE } },
 		)
 		await GatewaySchema.updateMany(
-			{ lastSeen: { $gte: cutoff } },
-			{ $set: { gateway_alive: true } },
+			{ lastSeenAt: { $gte: cutoff } },
+			{ $set: { gatewayStatus: GATEWAY_STATUS.ONLINE } },
 		)
 
 		// Node lar uchun ham xuddi shu
-		await AngleNode.updateMany(
+		await NodeSchema.updateMany(
 			{
-				$or: [{ lastSeen: { $exists: false } }, { lastSeen: { $lt: cutoff } }],
+				$or: [
+					{ lastSeenAt: { $exists: false } },
+					{ lastSeenAt: { $lt: cutoff } },
+				],
 			},
-			{ $set: { node_alive: false } },
-		)
-		await AngleNode.updateMany(
-			{ lastSeen: { $gte: cutoff } },
-			{ $set: { node_alive: true } },
+			{ $set: { status: 'offline' } },
 		)
 
 		// Agar xohlasangiz shu yerda “o‘zgarganlar”ni socket orqali admin dashboardga emit qilishingiz ham mumkin
