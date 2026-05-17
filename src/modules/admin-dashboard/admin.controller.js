@@ -284,7 +284,7 @@ adminDashboardController.getCompanyAvailableNodes = async (req, res) => {
 			statusCode: 200,
 		})
 	} catch (error) {
-		return sendError(res, error)
+		return sendFail(res, error)
 	}
 }
 
@@ -327,6 +327,22 @@ adminDashboardController.registerCompanyNodesToGateway = async (req, res) => {
 	}
 }
 
+adminDashboardController.unassignCompanyNodes = async (req, res) => {
+	try {
+		const data = await adminDashboardService.unassignCompanyNodes({
+			companyId: req.params.companyId,
+			nodeIds: req.body.nodeIds,
+		})
+		return sendSuccess(res, {
+			message: 'Nodes unassigned successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
 adminDashboardController.getCompanyAssignedNodesByGateway = async (
 	req,
 	res,
@@ -346,24 +362,6 @@ adminDashboardController.getCompanyAssignedNodesByGateway = async (
 		return sendFail(res, error)
 	}
 }
-
-// adminDashboardController.checkGateway = async (req, res) => {
-// 	try {
-// 		const data = await adminDashboardService.checkGatewayBySerialNumber(
-// 			req.params.serialNumber,
-// 		)
-
-// 		return sendSuccess(res, {
-// 			message: 'Gateway checked successfully',
-// 			data,
-// 			statusCode: 200,
-// 		})
-// 	} catch (error) {
-// 		return sendError(res, error)
-// 	}
-// }
-
-// ========= Admin Organization controllers ==========
 
 adminDashboardController.getCompanies = async (req, res) => {
 	try {

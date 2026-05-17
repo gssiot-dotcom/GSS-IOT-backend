@@ -98,8 +98,6 @@ router.get(
 	adminCompanyController.getCompanyAvailableNodes,
 )
 
-// router.get('/gateways/check/:serialNumber', checkGateway)
-
 router.post(
 	'/devices/companies/:companyId/nodes/check',
 	adminCompanyController.checkCompanyAvailableNodes,
@@ -107,6 +105,10 @@ router.post(
 router.post(
 	'/devices/companies/:companyId/gateways/:gatewayId/nodes/register',
 	adminCompanyController.registerCompanyNodesToGateway,
+)
+router.post(
+	'/devices/companies/:companyId/nodes/unassign',
+	adminCompanyController.unassignCompanyNodes,
 )
 router.get(
 	'/devices/companies/:companyId/gateways/:gatewayId/nodes',

@@ -23,7 +23,6 @@ router.use('/gateways', gateway_router)
 router.use('/buildings', building_router)
 router.use('/companies', company_router)
 router.use('/worker-dashboard', worker_router)
-router.use('/manager-dashboard', manager_router)
 router.use('/weather', weather_router)
 router.use('/reports', report_router)
 router.use('/alerts', alert_router)
@@ -31,4 +30,5 @@ router.use('/files', fileRoutes)
 // new routes of image upload aws s3
 router.use('/assets', assetRoutes)
 router.use('/admin', admin_router)
+router.use('/manager', manager_router)
 module.exports = router

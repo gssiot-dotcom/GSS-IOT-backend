@@ -545,6 +545,45 @@ class AdminDashboardService {
 		})
 	}
 
+	async createBuilding(payload = {}) {
+		const title = payload.title?.trim()
+		const address = payload.address?.trim()
+		const buildingType = payload.buildingType?.trim()
+		const companyId = payload.companyId
+
+		if (!title) {
+			throw this.createError('title is required', 400)
+		}
+
+		if (!address) {
+			throw this.createError('address is required', 400)
+		}
+
+		if (!buildingType) {
+			throw this.createError('buildingType is required', 400)
+		}
+
+		if (companyId && !mongoose.Types.ObjectId.isValid(companyId)) {
+			throw this.createError('Invalid companyId', 400)
+		}
+
+		const createdBuilding = await this.buildingSchema.create({
+			title,
+			address,
+			buildingType,
+			isAssigned: !!companyId,
+			companyId: companyId || null,
+		})
+
+		const result = {
+			...createdBuilding.toObject(),
+			checked: true,
+			assigned: true,
+		}
+
+		return result
+	}
+
 	async updateCompanyBuildingStatuses({ companyId, activeBuildingIds = [] }) {
 		await this.checkActiveCompany(companyId)
 
@@ -732,12 +771,11 @@ class AdminDashboardService {
 	normalizeNode(node) {
 		return {
 			_id: node._id,
-			id: node._id,
-
 			number: node.number,
 			nodeType: node.nodeType,
 			companyName: node.companyId?.companyName || null,
 			gatewaySerialNumber: node.gatewayId?.serialNumber || null,
+			gatewayId: node.gatewayId?._id || null, // ?. qo'shildi
 
 			status: node.status,
 			installedLocation: node.installedLocation || '',
@@ -1126,8 +1164,8 @@ class AdminDashboardService {
 
 		const nodes = await this.nodeSchema
 			.find(query)
-			.populate('companyId', 'companyName companyCode')
-			.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+			.populate('companyId', 'companyName')
+			.populate('gatewayId', 'serialNumber')
 			.sort({ number: 1 })
 			.lean()
 
@@ -1316,6 +1354,33 @@ class AdminDashboardService {
 				}
 			})
 
+			return result
+		} finally {
+			await session.endSession()
+		}
+	}
+
+	async unassignCompanyNodes({ companyId, nodeIds }) {
+		const companyObjectId = this.toObjectId(companyId, 'companyId')
+		if (!nodeIds?.length) throw this.createError('nodeIds is required', 400)
+
+		const objectIds = nodeIds.map(id => this.toObjectId(id, 'nodeId'))
+		const session = await mongoose.startSession()
+
+		try {
+			let result
+			await session.withTransaction(async () => {
+				const updateResult = await this.nodeSchema.updateMany(
+					{
+						_id: { $in: objectIds },
+						companyId: companyObjectId,
+						gatewayId: { $ne: null },
+					},
+					{ $set: { gatewayId: null } },
+					{ session },
+				)
+				result = { ok: true, modifiedCount: updateResult.modifiedCount }
+			})
 			return result
 		} finally {
 			await session.endSession()

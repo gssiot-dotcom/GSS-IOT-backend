@@ -6,6 +6,7 @@ const {
 	NODE_TYPE,
 	COMPANY_STATUS,
 	MEMBER_STATUS,
+	BUILDING_STATUS,
 } = require('../../lib/config')
 const {
 	CompanySchema,
@@ -18,9 +19,12 @@ const {
 } = require('../building/building.model')
 const GatewaySchema = require('../gateways/gateway.model')
 const NodeSchema = require('../nodes/node.model')
+const bcryptjs = require('bcryptjs')
+const { UserSchema } = require('../users/user.model')
 
 class ManagerDashboardService {
 	constructor() {
+		this.userSchema = UserSchema
 		this.companySchema = CompanySchema
 		this.companyMemberSchema = CompanyMemberSchema
 		this.buildingSchema = BuildingSchema
@@ -29,22 +33,22 @@ class ManagerDashboardService {
 		this.nodeSchema = NodeSchema
 		this.alarmLevelSchema = BuildingAlarmLevelSchema
 	}
-	createError(status, message) {
+	createError(message, statusCode = 400) {
 		const error = new Error(message)
-		error.status = status
+		error.statusCode = statusCode
 		return error
 	}
 
 	checkObjectId(id, fieldName = 'id') {
 		if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-			throw this.createError(400, `${fieldName} is not valid`)
+			throw this.createError(`${fieldName} is not valid`, 400)
 		}
 	}
 
 	async getAuthorizedManagerMembership({ userId, companyId = null }) {
 		this.checkObjectId(userId, 'userId')
 
-		const managerRoles = COMPANY_MEMBER_TYPES.manager
+		const managerRole = COMPANY_MEMBER_TYPES.manager
 
 		const query = {
 			memberId: userId,
@@ -56,418 +60,798 @@ class ManagerDashboardService {
 			query.companyId = companyId
 		}
 
-		if (managerRoles.length) {
-			query.memberRole = { $in: managerRoles }
+		if (managerRole.length) {
+			query.memberRole = { $in: managerRole }
 		}
 
 		const membership = await this.companyMemberSchema.findOne(query).lean()
 
 		if (!membership) {
 			throw this.createError(
-				403,
 				'You do not have manager permission for this company',
+				403,
 			)
 		}
 
 		return membership
 	}
 
-	async getManagerDashboard({ userId, companyId = null }) {
-		const membership = await this.getAuthorizedManagerMembership({
-			userId,
-			companyId,
-		})
+	async getMyCompany({ userId }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
 
-		const targetCompanyId = membership.companyId
+		const company = await this.companySchema.findById(companyId).lean()
+		if (!company) throw this.createError('Company not found', 404)
 
-		const selfCompany = await this.companySchema
-			.findOne({
-				_id: targetCompanyId,
-				companyStatus: COMPANY_STATUS.ACTIVE,
-			})
-			.lean()
+		return company
+	}
 
-		if (!selfCompany) {
-			throw this.createError(404, 'Company not found or inactive')
-		}
+	// ===================== Buildings page services ===================== //
+	async getManagerDashboard({ userId }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		const company = await this.companySchema.findById(companyId).lean()
+		if (!company) throw this.createError('Company not found', 404)
 
 		const managerRole = COMPANY_MEMBER_TYPES.manager
 		const workerRole = COMPANY_MEMBER_TYPES.worker
 
-		const [
-			buildingsCount,
-			managersCount,
-			workersCount,
-			gatewaysCount,
-			nodesCount,
-			buildingsList,
-			companyMembersList,
-			gatewaysList,
-		] = await Promise.all([
-			this.buildingSchema.countDocuments({
-				companyId: targetCompanyId,
-			}),
+		const [buildingsList, companyMembersList, gatewaysList, nodesStatsAgg] =
+			await Promise.all([
+				this.buildingSchema.find({ companyId }).sort({ createdAt: -1 }).lean(),
 
-			this.companyMemberSchema.countDocuments({
-				companyId: targetCompanyId,
-				status: MEMBER_STATUS.ACTIVE,
-				memberRole: managerRole,
-			}),
+				this.companyMemberSchema
+					.find({ companyId })
+					.populate({
+						path: 'memberId',
+						select: '_id name email phone userType',
+					})
+					.sort({ createdAt: -1 })
+					.lean(),
 
-			this.companyMemberSchema.countDocuments({
-				companyId: targetCompanyId,
-				status: MEMBER_STATUS.ACTIVE,
-				memberRole: workerRole,
-			}),
+				this.gatewaySchema
+					.find({ companyId, isAssigned: true })
+					.sort({ createdAt: -1 })
+					.lean(),
 
-			this.gatewaySchema.countDocuments({
-				companyId: targetCompanyId,
-				isAssigned: true,
-			}),
+				this.nodeSchema.aggregate([
+					{ $match: { companyId, isAssigned: true } },
+					{
+						$group: {
+							_id: '$companyId',
+							nodesCount: { $sum: 1 },
+							onlineNodesCount: {
+								$sum: {
+									$cond: [
+										{
+											$eq: [
+												{ $toLower: { $ifNull: ['$status', ''] } },
+												'online',
+											],
+										},
+										1,
+										0,
+									],
+								},
+							},
+							warningNodesCount: {
+								$sum: {
+									$cond: [
+										{
+											$in: [
+												{ $toLower: { $ifNull: ['$status', ''] } },
+												['warning', 'danger'],
+											],
+										},
+										1,
+										0,
+									],
+								},
+							},
+						},
+					},
+				]),
+			])
 
-			this.nodeSchema.countDocuments({
-				companyId: targetCompanyId,
-				isAssigned: true,
-			}),
+		const nodesStats = nodesStatsAgg[0] || {
+			nodesCount: 0,
+			onlineNodesCount: 0,
+			warningNodesCount: 0,
+		}
 
-			this.buildingSchema
-				.find({
-					companyId: targetCompanyId,
-				})
-				.sort({ createdAt: -1 })
-				.lean(),
-
-			this.companyMemberSchema
-				.find({
-					companyId: targetCompanyId,
-				})
-				.populate({
-					path: 'memberId',
-					select: '_id name email phone userType ',
-				})
-				.sort({ createdAt: -1 })
-				.lean(),
-
-			this.gatewaySchema
-				.find({
-					companyId: targetCompanyId,
-					isAssigned: true,
-				})
-				.sort({ createdAt: -1 })
-				.lean(),
-		])
+		const activeMembers = companyMembersList.filter(
+			m => m.status === MEMBER_STATUS.ACTIVE,
+		)
+		const managersCount = activeMembers.filter(
+			m => m.memberRole === managerRole,
+		).length
+		const workersCount = activeMembers.filter(
+			m => m.memberRole === workerRole,
+		).length
 
 		return {
-			selfCompany,
-
+			company,
 			companyStatistics: {
-				buildingsCount,
+				buildingsCount: buildingsList.length,
 				managersCount,
 				workersCount,
-				gatewaysCount,
-				nodesCount,
+				gatewaysCount: gatewaysList.length,
+				nodesCount: nodesStats.nodesCount,
+				onlineNodesCount: nodesStats.onlineNodesCount,
+				warningNodesCount: nodesStats.warningNodesCount,
 			},
-
 			buildingsList,
 			companyMembersList,
 			gatewaysList,
 		}
 	}
 
-	async getManagerBuildingsPage({ userId, companyId = null }) {
-		const membership = await this.getAuthorizedManagerMembership({
-			userId,
-			companyId,
-		})
+	async getManagerCompanyMembers({ userId, memberRole, search = '' }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
 
-		const targetCompanyId = membership.companyId
+		const query = { companyId }
 
-		const selfCompany = await this.companySchema
-			.findOne({
-				_id: targetCompanyId,
-				companyStatus: COMPANY_STATUS.ACTIVE,
-			})
-			.lean()
+		if (memberRole) query.memberRole = memberRole
 
-		if (!selfCompany) {
-			throw this.createError(404, 'Company not found or inactive')
+		if (search) {
+			const regex = new RegExp(search, 'i')
+			query.$or = [
+				{ 'memberId.name': regex },
+				{ 'memberId.email': regex },
+				{ 'memberId.phone': regex },
+			]
 		}
 
-		const buildings = await this.buildingSchema
-			.find({
-				companyId: targetCompanyId,
+		const members = await this.companyMemberSchema
+			.find(query)
+			.populate({
+				path: 'memberId',
+				select: '_id name email phone userType isAssigned',
 			})
 			.sort({ createdAt: -1 })
 			.lean()
 
-		const buildingIds = buildings.map(building => building._id)
+		return members.map(member => {
+			const user = member.memberId
+			return {
+				id: user?._id,
+				_id: user?._id,
+				companyMemberId: member._id,
+				name: user?.name || '',
+				email: user?.email || '',
+				phone: user?.phone || '',
+				type: user?.userType || '',
+				memberRole: member.memberRole,
+				status: member.status,
+				checked: member.status === MEMBER_STATUS.ACTIVE,
+				assigned: member.status === MEMBER_STATUS.ACTIVE,
+			}
+		})
+	}
+
+	async createManagerCompanyMemberUser({ userId, payload }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		const {
+			name,
+			email,
+			phone = '',
+			userType,
+			password,
+			passwordConfirm,
+		} = payload
+
+		if (!name || !email || !password || !passwordConfirm) {
+			throw this.createError('Please fill all required fields', 400)
+		}
+
+		if (password !== passwordConfirm) {
+			throw this.createError('Password confirmation does not match', 400)
+		}
+
+		const normalizedEmail = email.trim().toLowerCase()
+		const finalType = userType.toLowerCase()
+		const session = await mongoose.startSession()
+
+		try {
+			let result = null
+
+			await session.withTransaction(async () => {
+				const existingUser = await this.userSchema
+					.findOne({ email: normalizedEmail })
+					.session(session)
+
+				if (existingUser) throw this.createError('Email already exists', 409)
+
+				const hashedPassword = await bcryptjs.hash(password, 10)
+
+				const [createdUser] = await this.userSchema.create(
+					[
+						{
+							name,
+							email: normalizedEmail,
+							phone,
+							password: hashedPassword,
+							userType: finalType,
+							isAssigned: true,
+						},
+					],
+					{ session },
+				)
+
+				const [createdCompanyMember] = await this.companyMemberSchema.create(
+					[
+						{
+							companyId,
+							memberId: createdUser._id,
+							memberRole: finalType,
+							status: MEMBER_STATUS.ACTIVE,
+						},
+					],
+					{ session },
+				)
+
+				const userObject = createdUser.toObject()
+				delete userObject.password
+
+				result = {
+					_id: createdUser._id,
+					companyMemberId: createdCompanyMember._id,
+					name: userObject.name,
+					email: userObject.email,
+					phone: userObject.phone,
+					type: userObject.userType,
+					memberRole: createdCompanyMember.memberRole,
+					status: createdCompanyMember.status,
+					isAssigned: true,
+					checked: true,
+					assigned: true,
+				}
+			})
+
+			return result
+		} finally {
+			session.endSession()
+		}
+	}
+
+	async updateManagerCompanyMemberStatuses({ userId, activeMemberIds = [] }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		if (!Array.isArray(activeMemberIds)) {
+			throw this.createError('activeMemberIds must be an array', 400)
+		}
+
+		const uniqueActiveMemberIds = [
+			...new Set(activeMemberIds.map(id => id.toString())),
+		]
+
+		for (const memberId of uniqueActiveMemberIds) {
+			if (!mongoose.Types.ObjectId.isValid(memberId)) {
+				throw this.createError('Invalid member id', 400)
+			}
+		}
+
+		const existingCount = await this.companyMemberSchema.countDocuments({
+			companyId,
+			memberId: { $in: uniqueActiveMemberIds },
+		})
+
+		if (existingCount !== uniqueActiveMemberIds.length) {
+			throw this.createError('Some members do not belong to this company', 400)
+		}
+
+		await this.companyMemberSchema.updateMany(
+			{ companyId, memberId: { $in: uniqueActiveMemberIds } },
+			{ $set: { status: MEMBER_STATUS.ACTIVE } },
+		)
+
+		await this.companyMemberSchema.updateMany(
+			{ companyId, memberId: { $nin: uniqueActiveMemberIds } },
+			{ $set: { status: MEMBER_STATUS.INACTIVE } },
+		)
+
+		const updatedMembers = await this.getManagerCompanyMembers({ userId })
+
+		return {
+			members: updatedMembers,
+			activeCount: updatedMembers.filter(m => m.checked).length,
+			inactiveCount: updatedMembers.filter(m => !m.checked).length,
+			totalCount: updatedMembers.length,
+		}
+	}
+
+	async getManagerCompanyBuildings({ userId, search = '' }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		const query = { companyId }
+
+		if (search) {
+			const regex = new RegExp(search, 'i')
+			query.$or = [
+				{ title: regex },
+				{ address: regex },
+				{ buildingType: regex },
+			]
+		}
+
+		const buildings = await this.buildingSchema
+			.find(query)
+			.sort({ createdAt: -1 })
+			.lean()
+
+		return buildings.map(building => ({
+			_id: building._id,
+			title: building.title || '',
+			address: building.address || '',
+			buildingType: building.buildingType || '',
+			companyId: building.companyId,
+			buildingPlanImage: building.buildingPlanImage || [],
+			buildingRealImage: building.buildingRealImage || [],
+			buildingStatus: building.buildingStatus,
+			startDate: building.startDate,
+			createdAt: building.createdAt,
+			updatedAt: building.updatedAt,
+			checked: building.buildingStatus === BUILDING_STATUS.ACTIVE,
+			assigned: building.buildingStatus === BUILDING_STATUS.ACTIVE,
+			isAssigned: building.buildingStatus === BUILDING_STATUS.ACTIVE,
+		}))
+	}
+
+	async createManagerBuilding({ userId, payload }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		const title = payload.title?.trim()
+		const address = payload.address?.trim()
+		const buildingType = payload.buildingType?.trim()
+
+		if (!title) throw this.createError('title is required', 400)
+		if (!address) throw this.createError('address is required', 400)
+		if (!buildingType) throw this.createError('buildingType is required', 400)
+
+		const createdBuilding = await this.buildingSchema.create({
+			title,
+			address,
+			buildingType,
+			isAssigned: true,
+			companyId,
+		})
+
+		return {
+			...createdBuilding.toObject(),
+			checked: true,
+			assigned: true,
+		}
+	}
+
+	async updateManagerCompanyBuildingStatuses({
+		userId,
+		activeBuildingIds = [],
+	}) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		await this.buildingSchema.updateMany(
+			{ companyId, _id: { $in: activeBuildingIds } },
+			{ $set: { buildingStatus: BUILDING_STATUS.ACTIVE } },
+		)
+
+		await this.buildingSchema.updateMany(
+			{ companyId, _id: { $nin: activeBuildingIds } },
+			{ $set: { buildingStatus: BUILDING_STATUS.INACTIVE } },
+		)
+
+		return this.getManagerCompanyBuildings({ userId })
+	}
+
+	// ===================== Buildings page services ===================== //
+	async getManagerCompanyBuildingsPage({ userId }) {
+		const membership = await this.getAuthorizedManagerMembership({ userId })
+		const companyId = membership.companyId
+
+		const company = await this.companySchema.findOne({ _id: companyId }).lean()
+		if (!company) throw this.createError('Company not found', 404)
+
+		const buildings = await this.buildingSchema
+			.find({ companyId })
+			.sort({ createdAt: -1 })
+			.lean()
+
+		const buildingIds = buildings.map(b => b._id)
 
 		if (!buildingIds.length) {
-			return {
-				buildingsList: [],
-			}
+			return { buildingsList: [] }
 		}
 
 		const [buildingGateways, buildingWorkers] = await Promise.all([
 			this.gatewaySchema
-				.find({
-					companyId: targetCompanyId,
-					buildingId: { $in: buildingIds },
-					isAssigned: true,
-				})
+				.find({ companyId, buildingId: { $in: buildingIds }, isAssigned: true })
 				.sort({ createdAt: -1 })
 				.lean(),
 
 			this.buildingWorkerSchema
-				.find({
-					companyId: targetCompanyId,
-					buildingId: { $in: buildingIds },
-				})
-				.populate({
-					path: 'userId',
-					select: '_id name email phone userType',
-				})
+				.find({ companyId, buildingId: { $in: buildingIds } })
+				.populate({ path: 'userId', select: '_id name email phone userType' })
 				.sort({ createdAt: -1 })
 				.lean(),
 		])
 
-		const gatewayIds = buildingGateways.map(gateway => gateway._id)
+		const gatewayIds = buildingGateways.map(gw => gw._id)
 
 		const buildingNodes = gatewayIds.length
 			? await this.nodeSchema
-					.find({
-						companyId: targetCompanyId,
-						gatewayId: { $in: gatewayIds },
-						isAssigned: true,
-					})
+					.find({ companyId, gatewayId: { $in: gatewayIds }, isAssigned: true })
 					.lean()
 			: []
 
-		const gatewaysByBuildingId = {}
-		const workersByBuildingId = {}
+		const statsByBuildingId = {}
 		const gatewayIdToBuildingId = {}
-		const nodeStatsByBuildingId = {}
 
 		for (const building of buildings) {
-			const buildingId = building._id.toString()
-
-			gatewaysByBuildingId[buildingId] = []
-			workersByBuildingId[buildingId] = []
-			nodeStatsByBuildingId[buildingId] = {
+			statsByBuildingId[building._id.toString()] = {
 				totalNodesCount: 0,
-				angleNodesCount: 0,
-				gangformNodesCount: 0,
-				doorNodesCount: 0,
-				alertsCount: 0,
+				onlineNodesCount: 0,
+				totalGatewaysCounts: 0,
+				totalWorkersCount: 0,
 			}
 		}
 
 		for (const gateway of buildingGateways) {
 			if (!gateway.buildingId) continue
-
 			const buildingId = gateway.buildingId.toString()
-
-			if (!gatewaysByBuildingId[buildingId]) {
-				gatewaysByBuildingId[buildingId] = []
-			}
-
-			gatewaysByBuildingId[buildingId].push(gateway)
+			if (!statsByBuildingId[buildingId]) continue
+			statsByBuildingId[buildingId].totalGatewaysCounts += 1
 			gatewayIdToBuildingId[gateway._id.toString()] = buildingId
 		}
 
 		for (const worker of buildingWorkers) {
 			if (!worker.buildingId) continue
-
 			const buildingId = worker.buildingId.toString()
-
-			if (!workersByBuildingId[buildingId]) {
-				workersByBuildingId[buildingId] = []
-			}
-
-			workersByBuildingId[buildingId].push(worker)
+			if (!statsByBuildingId[buildingId]) continue
+			statsByBuildingId[buildingId].totalWorkersCount += 1
 		}
 
 		for (const node of buildingNodes) {
 			if (!node.gatewayId) continue
-
-			const gatewayId = node.gatewayId.toString()
-			const buildingId = gatewayIdToBuildingId[gatewayId]
-
-			if (!buildingId || !nodeStatsByBuildingId[buildingId]) continue
-
-			nodeStatsByBuildingId[buildingId].totalNodesCount += 1
-
-			if (node.nodeType === NODE_TYPE.ANGLE) {
-				nodeStatsByBuildingId[buildingId].angleNodesCount += 1
-			}
-
-			if (node.nodeType === NODE_TYPE.GANGFORM) {
-				nodeStatsByBuildingId[buildingId].gangformNodesCount += 1
-			}
-
-			if (node.nodeType === NODE_TYPE.DOOR) {
-				nodeStatsByBuildingId[buildingId].doorNodesCount += 1
-			}
-
-			if (node.status !== 'normal') {
-				nodeStatsByBuildingId[buildingId].alertsCount += 1
+			const buildingId = gatewayIdToBuildingId[node.gatewayId.toString()]
+			if (!buildingId || !statsByBuildingId[buildingId]) continue
+			statsByBuildingId[buildingId].totalNodesCount += 1
+			if (node.isOnline === true) {
+				statsByBuildingId[buildingId].onlineNodesCount += 1
 			}
 		}
 
-		const buildingsList = buildings.map(building => {
-			const buildingId = building._id.toString()
-			const nodeStats = nodeStatsByBuildingId[buildingId]
+		const buildingsList = buildings.map(building => ({
+			...building,
+			statistics: statsByBuildingId[building._id.toString()],
+		}))
 
-			return {
-				buildingData: building,
-
-				buildingGateways: gatewaysByBuildingId[buildingId] || [],
-
-				buildingWorkers: workersByBuildingId[buildingId] || [],
-
-				nodes: {
-					totalNodesCount: nodeStats.totalNodesCount,
-					angleNodesCount: nodeStats.angleNodesCount,
-					gangformNodesCount: nodeStats.gangformNodesCount,
-					doorNodesCount: nodeStats.doorNodesCount,
-				},
-
-				alertsCount: nodeStats.alertsCount,
-			}
-		})
-
-		return {
-			buildingsList,
-		}
+		return { buildingsList }
 	}
 
-	normalizeNodeType(nodeType) {
-		if (!nodeType) {
-			throw this.createError(400, 'nodeType is required')
-		}
-
-		const value = String(nodeType).toLowerCase()
-
-		const nodeTypeMap = {
-			door_node: NODE_TYPE.DOOR,
-			angle_node: NODE_TYPE.ANGLE,
-			gangform_node: NODE_TYPE.GANGFORM,
-		}
-
-		const normalizedNodeType = nodeTypeMap[value]
-
-		if (!normalizedNodeType) {
-			throw this.createError(400, 'Invalid nodeType')
-		}
-
-		return normalizedNodeType
-	}
-
-	getNodeSelectFieldsByType(nodeType) {
-		const baseFields = [
-			'_id',
-			'number',
-			'nodeType',
-			'companyId',
-			'gatewayId',
-			'status',
-			'installedLocation',
-			'installLocationImg',
-			'isAssigned',
-			'saveStatus',
-			'saveStatusLastChange',
-			'lastSeen',
-			// 'createdAt',
-			// 'updatedAt',
-		]
-
-		const doorFields = ['doorState', 'batteryLevel']
-
-		const angleFields = ['angleX', 'angleY', 'calibratedX', 'calibratedY']
-
-		const gangformFields = ['angleX', 'angleY']
-
-		if (nodeType === NODE_TYPE.DOOR) {
-			return [...baseFields, ...doorFields].join(' ')
-		}
-
-		if (nodeType === NODE_TYPE.ANGLE) {
-			return [...baseFields, ...angleFields].join(' ')
-		}
-
-		if (nodeType === NODE_TYPE.GANGFORM) {
-			return [...baseFields, ...gangformFields].join(' ')
-		}
-
-		throw this.createError(400, 'Invalid nodeType')
-	}
-
-	async getManagerBuildingNodesByType({
-		userId,
-		companyId = null,
-		buildingId,
-		nodeType,
-	}) {
-		const membership = await this.getAuthorizedManagerMembership({
-			userId,
-			companyId,
-		})
-
-		const targetCompanyId = membership.companyId
-
+	async checkManagerBuilding({ userId, buildingId }) {
 		this.checkObjectId(buildingId, 'buildingId')
-
-		const normalizedNodeType = this.normalizeNodeType(nodeType)
+		const membership = await this.getAuthorizedManagerMembership({ userId })
 
 		const building = await this.buildingSchema
 			.findOne({
 				_id: buildingId,
-				companyId: targetCompanyId,
+				companyId: membership.companyId,
 			})
 			.lean()
 
-		if (!building) {
-			throw this.createError(404, 'Building not found')
+		if (!building) throw this.createError('Building not found', 404)
+
+		return { building, companyId: membership.companyId }
+	}
+
+	async getManagerBuildingGateways({ userId, buildingId }) {
+		const { building, companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		const [assignedGateways, unassignedGateways] = await Promise.all([
+			this.gatewaySchema
+				.find({ companyId, buildingId, isAssigned: true })
+				.sort({ createdAt: -1 })
+				.lean(),
+
+			this.gatewaySchema
+				.find({
+					companyId,
+					$or: [{ buildingId: null }, { buildingId: { $exists: false } }],
+				})
+				.sort({ createdAt: -1 })
+				.lean(),
+		])
+
+		const gatewaysList = [
+			...assignedGateways.map(gw => ({
+				...gw,
+				checked: true,
+				assignedBuildingId: buildingId,
+			})),
+			...unassignedGateways.map(gw => ({
+				...gw,
+				checked: false,
+				assignedBuildingId: null,
+			})),
+		]
+
+		return { gatewaysList }
+	}
+
+	async updateManagerBuildingGateways({ userId, buildingId, gatewayIds = [] }) {
+		const { companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		if (!Array.isArray(gatewayIds))
+			throw this.createError('gatewayIds must be an array', 400)
+		for (const id of gatewayIds) this.checkObjectId(id, 'gatewayId')
+
+		const currentGateways = await this.gatewaySchema
+			.find({ companyId, buildingId, isAssigned: true })
+			.select('_id')
+			.lean()
+
+		const currentGatewayIds = currentGateways.map(gw => gw._id.toString())
+		const selectedGatewayIds = gatewayIds.map(id => id.toString())
+
+		const gatewayIdsToUnassign = currentGatewayIds.filter(
+			id => !selectedGatewayIds.includes(id),
+		)
+
+		if (gatewayIdsToUnassign.length) {
+			await this.gatewaySchema.updateMany(
+				{ _id: { $in: gatewayIdsToUnassign }, companyId, buildingId },
+				{ $set: { buildingId: null } },
+			)
 		}
 
-		const gatewaysList = await this.gatewaySchema
-			.find({
-				companyId: targetCompanyId,
-				buildingId,
-				isAssigned: true,
-			})
+		if (selectedGatewayIds.length) {
+			await this.gatewaySchema.updateMany(
+				{
+					_id: { $in: selectedGatewayIds },
+					companyId,
+					$or: [
+						{ buildingId },
+						{ buildingId: null },
+						{ buildingId: { $exists: false } },
+					],
+				},
+				{ $set: { buildingId } },
+			)
+		}
+
+		return { message: 'Gateways updated successfully' }
+	}
+
+	async getManagerBuildingWorkers({ userId, buildingId }) {
+		const { companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		const workerRoles = Array.isArray(COMPANY_MEMBER_TYPES.worker)
+			? COMPANY_MEMBER_TYPES.worker
+			: [COMPANY_MEMBER_TYPES.worker]
+
+		const assignedBuildingMembers = await this.buildingWorkerSchema
+			.find({ companyId, buildingId, status: MEMBER_STATUS.ACTIVE })
+			.populate({ path: 'userId', select: '_id name email phone userType' })
 			.sort({ createdAt: -1 })
 			.lean()
 
-		const gatewayIds = gatewaysList.map(gateway => gateway._id)
+		const assignedUserIds = assignedBuildingMembers
+			.map(m => m.userId?._id?.toString())
+			.filter(Boolean)
 
-		const selectFields = this.getNodeSelectFieldsByType(normalizedNodeType)
+		const inactiveCompanyMembers = await this.companyMemberSchema
+			.find({
+				companyId,
+				memberRole: { $in: workerRoles },
+				status: MEMBER_STATUS.INACTIVE,
+				memberId: { $nin: assignedUserIds },
+			})
+			.populate({ path: 'memberId', select: '_id name email phone userType' })
+			.sort({ createdAt: -1 })
+			.lean()
+
+		const workersList = [
+			...assignedBuildingMembers
+				.filter(m => m.userId)
+				.map(m => ({
+					_id: m.userId._id,
+					name: m.userId.name,
+					email: m.userId.email,
+					phone: m.userId.phone,
+					userType: m.userId.userType,
+					checked: true,
+					assignedBuildingId: buildingId,
+					buildingMemberId: m._id,
+				})),
+
+			...inactiveCompanyMembers
+				.filter(m => m.memberId)
+				.map(m => ({
+					_id: m.memberId._id,
+					name: m.memberId.name,
+					email: m.memberId.email,
+					phone: m.memberId.phone,
+					userType: m.memberId.userType,
+					checked: false,
+					assignedBuildingId: null,
+					companyMemberId: m._id,
+				})),
+		]
+
+		return { workersList }
+	}
+
+	async updateManagerBuildingWorkers({ userId, buildingId, workerIds = [] }) {
+		const { companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		if (!Array.isArray(workerIds))
+			throw this.createError('workerIds must be an array', 400)
+		for (const id of workerIds) this.checkObjectId(id, 'workerId')
+
+		const selectedWorkerIds = workerIds.map(id => id.toString())
+
+		const currentBuildingMembers = await this.buildingWorkerSchema
+			.find({ companyId, buildingId, status: MEMBER_STATUS.ACTIVE })
+			.select('userId')
+			.lean()
+
+		const currentWorkerIds = currentBuildingMembers.map(m =>
+			m.userId.toString(),
+		)
+		const workerIdsToUnassign = currentWorkerIds.filter(
+			id => !selectedWorkerIds.includes(id),
+		)
+
+		if (workerIdsToUnassign.length) {
+			await Promise.all([
+				this.buildingWorkerSchema.updateMany(
+					{ companyId, buildingId, userId: { $in: workerIdsToUnassign } },
+					{ $set: { status: MEMBER_STATUS.INACTIVE } },
+				),
+				this.companyMemberSchema.updateMany(
+					{ companyId, memberId: { $in: workerIdsToUnassign } },
+					{ $set: { status: MEMBER_STATUS.INACTIVE } },
+				),
+			])
+		}
+
+		for (const workerId of selectedWorkerIds) {
+			const companyMember = await this.companyMemberSchema.findOne({
+				companyId,
+				memberId: workerId,
+			})
+			if (!companyMember) continue
+
+			await this.buildingWorkerSchema.findOneAndUpdate(
+				{ companyId, buildingId, userId: workerId },
+				{
+					$set: {
+						companyId,
+						buildingId,
+						userId: workerId,
+						status: MEMBER_STATUS.ACTIVE,
+					},
+				},
+				{ upsert: true, new: true },
+			)
+
+			await this.companyMemberSchema.updateOne(
+				{ _id: companyMember._id },
+				{ $set: { status: MEMBER_STATUS.ACTIVE } },
+			)
+		}
+
+		return { message: 'Workers updated successfully' }
+	}
+
+	async createManagerBuildingWorker({ userId, buildingId, payload }) {
+		const { companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		const { name, email, phone, password, passwordConfirm } = payload
+
+		if (!name || !email || !phone || !password || !passwordConfirm) {
+			throw this.createError('All fields are required', 400)
+		}
+
+		if (password !== passwordConfirm)
+			throw this.createError('Passwords do not match', 400)
+
+		const existingUser = await this.userSchema.findOne({ email }).lean()
+		if (existingUser) throw this.createError('User already exists', 409)
+
+		const createdUser = await this.userSchema.create({
+			name,
+			email,
+			phone,
+			userType: 'worker',
+			password,
+			passwordConfirm,
+		})
+
+		await this.companyMemberSchema.create({
+			companyId,
+			memberId: createdUser._id,
+			memberRole: COMPANY_MEMBER_TYPES.worker,
+			status: MEMBER_STATUS.ACTIVE,
+		})
+
+		return {
+			_id: createdUser._id,
+			name: createdUser.name,
+			email: createdUser.email,
+			phone: createdUser.phone,
+			userType: createdUser.userType,
+			checked: true,
+			assignedBuildingId: buildingId,
+		}
+	}
+
+	// ===================== Nodes page services ===================== //
+	async getManagerBuildingNodesPage({ userId, buildingId, nodeType }) {
+		const { companyId } = await this.checkManagerBuilding({
+			userId,
+			buildingId,
+		})
+
+		if (!nodeType) throw this.createError('nodeType is required', 400)
+
+		const [gatewayList, buildingAlarmLevel] = await Promise.all([
+			this.gatewaySchema
+				.find({ companyId, buildingId, isAssigned: true })
+				.sort({ createdAt: -1 })
+				.lean(),
+
+			this.alarmLevelSchema.findOne({ buildingId, alarmType: nodeType }).lean(),
+		])
+
+		const gatewayIds = gatewayList.map(gw => gw._id)
 
 		const nodesList = gatewayIds.length
 			? await this.nodeSchema
 					.find({
-						companyId: targetCompanyId,
+						companyId,
 						gatewayId: { $in: gatewayIds },
-						nodeType: normalizedNodeType,
+						nodeType,
 						isAssigned: true,
 					})
-					.select(selectFields)
+					.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
 					.sort({ number: 1 })
 					.lean()
 			: []
 
-		const alarmLevels = await this.alarmLevelSchema
-			.find({
-				buildingId,
-				alarmType: normalizedNodeType,
-			})
-			.lean()
-
 		return {
-			nodeType: normalizedNodeType,
 			nodesList,
-			gatewaysList,
-			alarmLevels,
+			gatewayList,
+			buildingAlarmLevel: buildingAlarmLevel || {
+				buildingId,
+				alarmType: nodeType,
+				blue: 0,
+				green: 0,
+				yellow: 0,
+				red: 0,
+			},
 		}
 	}
 }
