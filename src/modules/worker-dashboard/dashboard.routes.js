@@ -1,35 +1,20 @@
 const router = require('express').Router()
 const { isAuth } = require('../../middlewares/auth.middleware')
 const { isWorker } = require('../../middlewares/role.middleware')
-const controller = require('./dashboard.controller')
+const {
+	getWorkerDashboard,
+	getMyCompany,
+	getWorkerBuildingNodesPage,
+} = require('./dashboard.controller')
 
 router.use(isAuth, isWorker)
 // ============= My Company ========================== //
-router.get('/company/me', getMyCompany)
+router.get('/company', getMyCompany)
 
 //  ========================= Dashboard page routes ======================== //
-router.get('/dashboard', getManagerDashboard)
-router.get('/members', getManagerCompanyMembers)
-router.post('/members', createManagerCompanyMemberUser)
-router.patch('/members/statuses', updateManagerCompanyMemberStatuses)
-router.get('/buildings', getManagerCompanyBuildings)
-router.post('/buildings', createManagerBuilding)
-router.patch('/buildings/statuses', updateManagerCompanyBuildingStatuses)
+router.get('/dashboard/buildings', getWorkerDashboard)
 
-//  ========================= Buildings page routes ======================== //
-router.get('/buildings-page', getManagerCompanyBuildingsPage)
-router.get('/buildings/:buildingId/gateways', getManagerBuildingGateways)
-router.put('/buildings/:buildingId/gateways', updateManagerBuildingGateways)
-router.get('/buildings/:buildingId/workers', getManagerBuildingWorkers)
-router.put('/buildings/:buildingId/workers', updateManagerBuildingWorkers)
-router.post('/buildings/:buildingId/workers', createManagerBuildingWorker)
-
-//  ========================= Nodes page routes ======================== //
-router.get('/buildings/:buildingId/nodes-page', getManagerBuildingNodesPage)
-
-// ========================= Manager uploading images on AWS routes ===================== //
-router.post('/assets/presigned-url', getManagerPresignedUrl)
-router.post('/assets/save', saveManagerAsset)
-router.post('/assets/remove', removeManagerAsset)
+// //  ========================= Nodes page routes ======================== //
+router.get('/buildings/:buildingId/nodes-page', getWorkerBuildingNodesPage)
 
 module.exports = router

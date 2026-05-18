@@ -6,11 +6,28 @@ const workerDashboardService = new WorkerDashboardService()
 
 let workerDashboardController = module.exports
 
-workerDashboardController.assignedBuildings = async (req, res, next) => {
+workerDashboardController.getMyCompany = async (req, res, next) => {
+	try {
+		logger('request: worker-MyCompany')
+
+		const result = await workerDashboardService.getMyCompany(req.user._id)
+
+		return sendSuccess(res, {
+			message: 'Worker company fetched successfully',
+			data: result,
+			statusCode: 200,
+		})
+	} catch (error) {
+		logError('ERROR: contr.getMyCompany: company', error)
+		return sendFail(res, error)
+	}
+}
+
+workerDashboardController.getWorkerDashboard = async (req, res, next) => {
 	try {
 		logger('request: worker-dashboard-assignedBuildings')
 
-		const result = await workerDashboardService.getAssignedBuildings(
+		const result = await workerDashboardService.getWorkerDashboardPage(
 			req.user._id,
 		)
 
@@ -25,23 +42,19 @@ workerDashboardController.assignedBuildings = async (req, res, next) => {
 	}
 }
 
-workerDashboardController.buildingNodesByType = async (req, res, next) => {
+workerDashboardController.getWorkerBuildingNodesPage = async (req, res) => {
 	try {
-		logger('request: worker-dashboard-buildingNodesByType')
-
-		const result = await workerDashboardService.getBuildingNodesByType(
-			req.user._id,
-			req.params.buildingId,
-			req.params.nodeType,
-		)
-
+		const data = await workerDashboardService.getWorkerBuildingNodesPage({
+			userId: req.user._id,
+			buildingId: req.params.buildingId,
+			nodeType: req.query.nodeType,
+		})
 		return sendSuccess(res, {
-			message: 'Building nodes fetched successfully',
-			data: result,
+			message: 'Building nodes page fetched successfully',
+			data,
 			statusCode: 200,
 		})
 	} catch (error) {
-		logError('ERROR: contr.WorkerDashboard: buildingNodesByType', error)
 		return sendFail(res, error)
 	}
 }

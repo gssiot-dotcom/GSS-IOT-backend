@@ -221,6 +221,10 @@ class AdminBuildingsService {
 				onlineNodesCount: 0,
 				totalGatewaysCounts: 0,
 				totalWorkersCount: 0,
+
+				doorNodeCount: 0,
+				angleNodeCount: 0,
+				gangformNodeCount: 0,
 			}
 		}
 
@@ -253,11 +257,24 @@ class AdminBuildingsService {
 
 			if (!buildingId || !statsByBuildingId[buildingId]) continue
 
-			statsByBuildingId[buildingId].totalNodesCount += 1
+			const stats = statsByBuildingId[buildingId]
 
-			// Agar sizda online field nomi boshqacha bo‘lsa, shu joyni almashtiring.
+			stats.totalNodesCount += 1
+
 			if (node.isOnline === true) {
-				statsByBuildingId[buildingId].onlineNodesCount += 1
+				stats.onlineNodesCount += 1
+			}
+
+			if (node.nodeType === 'door_node') {
+				stats.doorNodeCount += 1
+			}
+
+			if (node.nodeType === 'angle_node') {
+				stats.angleNodeCount += 1
+			}
+
+			if (node.nodeType === 'gangform_node') {
+				stats.gangformNodeCount += 1
 			}
 		}
 

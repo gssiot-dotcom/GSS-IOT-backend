@@ -486,7 +486,11 @@ class ManagerDashboardService {
 
 		const buildingNodes = gatewayIds.length
 			? await this.nodeSchema
-					.find({ companyId, gatewayId: { $in: gatewayIds }, isAssigned: true })
+					.find({
+						companyId,
+						gatewayId: { $in: gatewayIds },
+						isAssigned: true,
+					})
 					.lean()
 			: []
 
@@ -499,31 +503,56 @@ class ManagerDashboardService {
 				onlineNodesCount: 0,
 				totalGatewaysCounts: 0,
 				totalWorkersCount: 0,
+
+				doorNodeCount: 0,
+				angleNodeCount: 0,
+				gangformNodeCount: 0,
 			}
 		}
 
 		for (const gateway of buildingGateways) {
 			if (!gateway.buildingId) continue
+
 			const buildingId = gateway.buildingId.toString()
 			if (!statsByBuildingId[buildingId]) continue
+
 			statsByBuildingId[buildingId].totalGatewaysCounts += 1
 			gatewayIdToBuildingId[gateway._id.toString()] = buildingId
 		}
 
 		for (const worker of buildingWorkers) {
 			if (!worker.buildingId) continue
+
 			const buildingId = worker.buildingId.toString()
 			if (!statsByBuildingId[buildingId]) continue
+
 			statsByBuildingId[buildingId].totalWorkersCount += 1
 		}
 
 		for (const node of buildingNodes) {
 			if (!node.gatewayId) continue
+
 			const buildingId = gatewayIdToBuildingId[node.gatewayId.toString()]
 			if (!buildingId || !statsByBuildingId[buildingId]) continue
-			statsByBuildingId[buildingId].totalNodesCount += 1
+
+			const stats = statsByBuildingId[buildingId]
+
+			stats.totalNodesCount += 1
+
 			if (node.isOnline === true) {
-				statsByBuildingId[buildingId].onlineNodesCount += 1
+				stats.onlineNodesCount += 1
+			}
+
+			if (node.nodeType === 'door_node') {
+				stats.doorNodeCount += 1
+			}
+
+			if (node.nodeType === 'angle_node') {
+				stats.angleNodeCount += 1
+			}
+
+			if (node.nodeType === 'gangform_node') {
+				stats.gangformNodeCount += 1
 			}
 		}
 
