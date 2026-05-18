@@ -8,6 +8,8 @@ const { eventBus } = require('../../../shared/eventBus')
 const { logger, logError } = require('../../../lib/logger')
 const { checkAndLogAngle } = require('../../../services/Alert.service') // sizdagi pathga moslang
 const NodeSchema = require('../node.model')
+const { ALARM_NODE_TYPES } = require('../../../lib/config')
+const { BuildingAlarmLevelSchema } = require('../../building/building.model')
 // const { getGatewayContextByLast4 } = require('../../../cache/gatewayContext')
 // const { persistQueue } = require('../../../utils/ConcurrencyQueue')
 // const {
@@ -144,7 +146,14 @@ async function handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 }) {
 		return
 	}
 
-	// 2. Node topish va angleX/Y yangilash
+	// 2. AlarmLevel topish va status hisoblash (gateway.buildingId orqali)
+	const saveStatus = await resolveAngleStatus({
+		buildingId: gateway.buildingId,
+		angle_x,
+		angle_y: angle_y ?? 0,
+	})
+
+	// 3. Node topish va angleX/Y yangilash
 	const node = await NodeSchema.findOneAndUpdate(
 		{
 			gatewayId: gateway._id,
@@ -155,7 +164,7 @@ async function handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 }) {
 				angleX: angle_x,
 				angleY: angle_y ?? 0,
 				lastSeenAt: new Date(),
-				saveStatus: normal,
+				status: saveStatus,
 			},
 		},
 		{ new: true },
@@ -173,23 +182,25 @@ async function handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 }) {
 		nodeId: node._id,
 		angleX: angle_x,
 		angleY: angle_y,
+		status: saveStatus,
 	})
 
-	// 3. Socket orqali frontendga yuborish (tez, history kutmasdan)
-	if (node.buildingId) {
+	// 4. Socket orqali frontendga yuborish (tez, history kutmasdan)
+	if (gateway.buildingId) {
 		eventBus.emit('rt.angle', {
-			buildingId: node.buildingId.toString(),
+			buildingId: gateway.buildingId.toString(),
 			nodeId: node._id,
 			nodeNumber: node.number,
 			angleX: angle_x,
 			angleY: angle_y ?? 0,
-			doorNum,
+			updatedAt: node.updatedAt,
+			status: node.status,
 		})
 	}
 
-	// 4. Tarixga saqlash
+	// 5. Tarixga saqlash
 	await AngleNodeHistory.create({
-		gwNumber: gateway.number,
+		gwNumber: gateway.serialNumber,
 		nodeNumber: doorNum,
 		angleX: angle_x,
 		angleY: angle_y ?? 0,
@@ -200,6 +211,43 @@ async function handleAngleNodeMqttMessage({ topic, data, gatewayNumberLast4 }) {
 		angle_x,
 		angle_y,
 	})
+}
+
+/**
+ * buildingId va angle qiymatlari asosida status qaytaradi
+ * @returns {'normal'|'caution'|'warning'|'danger'}
+ */
+async function resolveAngleStatus({ buildingId, angle_x, angle_y }) {
+	if (!buildingId) return 'normal'
+
+	const alarmLevel = await BuildingAlarmLevelSchema.findOne({
+		buildingId,
+		alarmType: ALARM_NODE_TYPES.ANGLE,
+	}).lean()
+
+	// AlarmLevel yo'q yoki barcha qiymatlar 0 bo'lsa — normal
+	if (
+		!alarmLevel ||
+		(!alarmLevel.green && !alarmLevel.yellow && !alarmLevel.red)
+	) {
+		return 'normal'
+	}
+
+	const { green, yellow, red } = alarmLevel
+
+	const getStatus = angle => {
+		if (red && angle >= red) return 'danger'
+		if (yellow && angle >= yellow) return 'warning'
+		if (green && angle >= green) return 'caution'
+		return 'normal'
+	}
+
+	const statusPriority = { normal: 0, caution: 1, warning: 2, danger: 3 }
+
+	const statusX = getStatus(Math.abs(angle_x))
+	const statusY = getStatus(Math.abs(angle_y))
+
+	return statusPriority[statusX] >= statusPriority[statusY] ? statusX : statusY
 }
 
 /**

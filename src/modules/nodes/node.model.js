@@ -22,6 +22,12 @@ const nodeSchema = new mongoose.Schema(
 			default: null,
 		},
 
+		buildingId: {
+			type: mongoose.Schema.ObjectId,
+			ref: 'Building',
+			default: null,
+		},
+
 		gatewayId: {
 			type: mongoose.Schema.ObjectId,
 			ref: 'Gateway',

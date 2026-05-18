@@ -24,39 +24,83 @@ async function handleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 
 	logger('Door-Node mqtt message:', data, '|', timeString)
 
+	if (data.doorNum == null || data.doorChk == null) {
+		logError('handleNodeMqttMessage: missing required fields', data)
+		return
+	}
+
+	const gateway = await GatewaySchema.findOne({
+		serialNumber: { $regex: `${gatewayNumberLast4}$` },
+	}).lean()
+
+	if (!gateway) {
+		logError('handleNodeMqttMessage: gateway not found', gatewayNumberLast4)
+		return
+	}
+
+	const doorState = Number(data.doorChk)
+	const saveStatus = doorState === 1 ? 'danger' : 'normal'
+
 	const eventData = {
-		gwNumber: gatewayNumberLast4,
+		gwNumber: gateway.serialNumber,
 		nodeNumber: data.doorNum,
-		doorState: data.doorChk,
+		doorState,
 		batteryLevel: data.betChk,
 	}
 
 	const updateData = {
-		doorState: data.doorChk,
+		doorState,
+		status: saveStatus,
 		batteryLevel: data.betChk,
+		lastSeenAt: new Date(),
 		...(data.betChk_2 !== undefined && { betChk_2: data.betChk_2 }),
 	}
 
 	const updatedNode = await NodeSchema.findOneAndUpdate(
-		{ number: data.doorNum },
-		{ $set: updateData },
-		{ new: true },
+		{
+			gatewayId: gateway._id,
+			number: data.doorNum,
+		},
+		{
+			$set: updateData,
+		},
+		{
+			new: true,
+		},
 	)
 
 	if (!updatedNode) {
-		logInfo('Node를 찾을 수 없음:', data.doorNum)
+		logInfo('Door node not found:', {
+			gatewayNumberLast4,
+			doorNum: data.doorNum,
+		})
 		return
 	}
 
 	try {
-		await new NodesHistory(eventData).save()
+		await NodesHistory.create(eventData)
 	} catch (err) {
 		logError('NodesHistory 저장 오류:', err.message)
 		return
 	}
 
-	// 🔥 endi mqttEmitter emas, eventBus:
-	eventBus.emit('rt.node', updatedNode)
+	if (gateway.buildingId) {
+		eventBus.emit('rt.node', {
+			buildingId: gateway.buildingId.toString(),
+			nodeId: updatedNode._id,
+			nodeNumber: updatedNode.number,
+			doorState: updatedNode.doorState,
+			batteryLevel: updatedNode.batteryLevel,
+			status: updatedNode.status,
+			updatedAt: updatedNode.updatedAt,
+		})
+	}
+
+	logger('handleNodeMqttMessage: door node updated', {
+		nodeId: updatedNode._id,
+		doorState,
+		status: saveStatus,
+	})
 }
 
 /**

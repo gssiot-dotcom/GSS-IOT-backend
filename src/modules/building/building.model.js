@@ -90,7 +90,6 @@ const alarmLevelSchema = new mongoose.Schema(
 				message: '{VALUE} is not a valid alarm type',
 			},
 		},
-		blue: { type: Number, default: 0 },
 		green: { type: Number, default: 0 },
 		yellow: { type: Number, default: 0 },
 		red: { type: Number, default: 0 },

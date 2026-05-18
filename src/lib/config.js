@@ -13,6 +13,9 @@ exports.NODE_TYPE = {
 	GANGFORM: 'gangform_node',
 }
 
+;((exports.NODE_STATUS = 'normal' | 'caution'),
+	'warning' | 'danger' | 'offline')
+
 exports.ALARM_NODE_TYPES = {
 	ANGLE: 'angle_node',
 	GANGFORM: 'gangform_node',

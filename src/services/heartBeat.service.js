@@ -1,4 +1,5 @@
 // services/Heartbeat.service.js
+const { logger } = require('../lib/logger')
 const GatewaySchema = require('../modules/gateways/gateway.model')
 const { AngleNode } = require('../modules/nodes/angle-node/angleNode.model')
 const NodeSchema = require('../modules/nodes/node.model')
@@ -7,13 +8,16 @@ const GATEWAY_STATUS = { ONLINE: 'online', OFFLINE: 'offline' }
 // ===== Loop sikl bo'lib har 10 minutda bir marttadan db ni tekshiradi. agar oxirgi kelgan data kelganiga 1 soatdan oshgan bo'lsa product-status ni false qiladi. bu esa product bilan connection uzilganini bildiradi.
 
 function startHeartbeatJob({
-	intervalMs = 10 * 60 * 1000,
-	windowMs = 60 * 60 * 1000,
+	intervalMs = 20 * 60 * 1000,
+	windowMs = 30 * 60 * 1000,
 } = {}) {
 	// intervalMs: necha daqiqada tekshiramiz (default 5 minut)
 	// windowMs: "tirik" deb hisoblash oynasi (default 1 soat)
 
 	const run = async () => {
+		logger(
+			'===================== Nodes and gateways life checking is on ====================',
+		)
 		const cutoff = new Date(Date.now() - windowMs)
 
 		// Gateway: 1 soat ichida kamida bitta node dan data bo‘lsa lastSeen gatewayga qo‘yilgan bo‘ladi → true bo‘lib qoladi.

@@ -1,5 +1,6 @@
 const { sendSuccess, sendFail } = require('../../lib/http.response')
-const { logError } = require('../../lib/logger')
+const { logError, logger } = require('../../lib/logger')
+const { handleNodeMqttMessage } = require('./door-node/node.mqtt.service')
 const NodeService = require('./node.service')
 
 const nodeService = new NodeService()
