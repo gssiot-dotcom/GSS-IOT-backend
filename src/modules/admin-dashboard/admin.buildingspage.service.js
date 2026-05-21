@@ -6,6 +6,7 @@ const {
 	NODE_TYPE,
 	COMPANY_STATUS,
 	MEMBER_STATUS,
+	ALARM_NODE_TYPES,
 } = require('../../lib/config')
 const {
 	CompanySchema,
@@ -19,6 +20,7 @@ const {
 const GatewaySchema = require('../gateways/gateway.model')
 const NodeSchema = require('../nodes/node.model')
 const { UserSchema } = require('../users/user.model')
+const bcrypt = require('bcryptjs')
 
 class AdminBuildingsService {
 	constructor() {
@@ -31,6 +33,7 @@ class AdminBuildingsService {
 		this.nodeSchema = NodeSchema
 		this.alarmLevelSchema = BuildingAlarmLevelSchema
 	}
+
 	createError(status, message) {
 		const error = new Error(message)
 		error.status = status
@@ -81,13 +84,11 @@ class AdminBuildingsService {
 
 			this.companyMemberSchema.countDocuments({
 				companyId: targetCompanyId,
-				status: MEMBER_STATUS.ACTIVE,
 				memberRole: managerRole,
 			}),
 
 			this.companyMemberSchema.countDocuments({
 				companyId: targetCompanyId,
-				status: MEMBER_STATUS.ACTIVE,
 				memberRole: workerRole,
 			}),
 
@@ -189,6 +190,7 @@ class AdminBuildingsService {
 				.find({
 					companyId: targetCompanyId,
 					buildingId: { $in: buildingIds },
+					status: MEMBER_STATUS.ACTIVE,
 				})
 				.populate({
 					path: 'userId',
@@ -261,7 +263,7 @@ class AdminBuildingsService {
 
 			stats.totalNodesCount += 1
 
-			if (node.isOnline === true) {
+			if (node.status !== 'offline') {
 				stats.onlineNodesCount += 1
 			}
 
@@ -429,9 +431,7 @@ class AdminBuildingsService {
 
 		const targetCompanyId = building.companyId
 
-		const workerRoles = Array.isArray(COMPANY_MEMBER_TYPES.worker)
-			? COMPANY_MEMBER_TYPES.worker
-			: [COMPANY_MEMBER_TYPES.worker]
+		const workerRole = COMPANY_MEMBER_TYPES.worker
 
 		const assignedBuildingMembers = await this.buildingWorkerSchema
 			.find({
@@ -453,7 +453,7 @@ class AdminBuildingsService {
 		const inactiveCompanyMembers = await this.companyMemberSchema
 			.find({
 				companyId: targetCompanyId,
-				memberRole: { $in: workerRoles },
+				memberRole: workerRole,
 				status: MEMBER_STATUS.INACTIVE,
 				memberId: { $nin: assignedUserIds },
 			})
@@ -635,13 +635,14 @@ class AdminBuildingsService {
 			throw this.createError(409, 'User already exists')
 		}
 
+		const hashedPassword = await bcrypt.hash(password, 10)
+
 		const createdUser = await this.userSchema.create({
 			name,
 			email,
 			phone,
 			userType: 'worker',
-			password,
-			passwordConfirm,
+			password: hashedPassword,
 		})
 
 		await this.companyMemberSchema.create({
@@ -861,6 +862,88 @@ class AdminBuildingsService {
 				red: 0,
 			},
 		}
+	}
+
+	validateAlarmLevelPayload({ buildingId, alarmType, green, yellow, red }) {
+		if (!mongoose.Types.ObjectId.isValid(buildingId)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		if (!alarmType) {
+			throw this.createError('alarmType is required', 400)
+		}
+
+		if (!Object.values(ALARM_NODE_TYPES).includes(alarmType)) {
+			throw this.createError('Invalid alarm type', 400)
+		}
+
+		const values = { green, yellow, red }
+		const ALARM_MAX_DEGREE = 12
+
+		for (const [key, value] of Object.entries(values)) {
+			if (
+				typeof value !== 'number' ||
+				Number.isNaN(value) ||
+				value < 0 ||
+				value > ALARM_MAX_DEGREE
+			) {
+				throw this.createError(
+					`${key} must be a number between 0 and ${ALARM_MAX_DEGREE}`,
+					400,
+				)
+			}
+		}
+
+		// 0 degani disabled/default sifatida qabul qilinyapti.
+		// Shuning uchun 0 bo‘lsa comparison skip qilamiz.
+		if (green !== 0 && yellow !== 0 && green > yellow) {
+			throw this.createError('green cannot be greater than yellow', 400)
+		}
+
+		if (yellow !== 0 && red !== 0 && yellow > red) {
+			throw this.createError('yellow cannot be greater than red', 400)
+		}
+	}
+
+	async updateBuildingAlarmLevel({
+		buildingId,
+		alarmType,
+		green,
+		yellow,
+		red,
+	}) {
+		this.validateAlarmLevelPayload({
+			buildingId,
+			alarmType,
+			green,
+			yellow,
+			red,
+		})
+
+		const alarmLevel = await this.alarmLevelSchema.findOneAndUpdate(
+			{
+				buildingId,
+				alarmType,
+			},
+			{
+				$set: {
+					green,
+					yellow,
+					red,
+				},
+				$setOnInsert: {
+					buildingId,
+					alarmType,
+				},
+			},
+			{
+				new: true,
+				upsert: true,
+				runValidators: true,
+			},
+		)
+
+		return alarmLevel
 	}
 }
 

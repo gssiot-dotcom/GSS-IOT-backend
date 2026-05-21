@@ -6,7 +6,7 @@ const VerticalNodeHistorySchema = new Schema(
 	{
 		nodeNumber: { type: Number, required: true },
 		angleX: { type: Number, required: true },
-		angleYy: { type: Number, required: true },
+		angleY: { type: Number, required: true },
 		gwNumber: { type: Number, required: true },
 	},
 	{ timestamps: true },

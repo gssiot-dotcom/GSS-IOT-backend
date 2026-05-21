@@ -75,27 +75,24 @@ const buildingSchema = new mongoose.Schema(
 	{ timestamps: true },
 )
 
-const alarmLevelSchema = new mongoose.Schema(
-	{
-		buildingId: {
-			type: mongoose.Schema.ObjectId,
-			ref: 'Building',
-			required: true,
-		},
-		alarmType: {
-			type: String,
-			required: true,
-			enum: {
-				values: Object.values(ALARM_NODE_TYPES),
-				message: '{VALUE} is not a valid alarm type',
-			},
-		},
-		green: { type: Number, default: 0 },
-		yellow: { type: Number, default: 0 },
-		red: { type: Number, default: 0 },
+const alarmLevelSchema = new mongoose.Schema({
+	buildingId: {
+		type: mongoose.Schema.ObjectId,
+		ref: 'Building',
+		required: true,
 	},
-	{ _id: false },
-)
+	alarmType: {
+		type: String,
+		required: true,
+		enum: {
+			values: Object.values(ALARM_NODE_TYPES),
+			message: '{VALUE} is not a valid alarm type',
+		},
+	},
+	green: { type: Number, default: 0 },
+	yellow: { type: Number, default: 0 },
+	red: { type: Number, default: 0 },
+})
 
 const buildingMemberSchema = new mongoose.Schema(
 	{

@@ -21,6 +21,7 @@ const {
 	removeManagerAsset,
 	updateManagerBuildingWorkers,
 	getMyCompany,
+	updateAlarmLevel,
 } = require('./dashboard.controller')
 
 router.use(isAuth, isManager)
@@ -46,6 +47,7 @@ router.post('/buildings/:buildingId/workers', createManagerBuildingWorker)
 
 //  ========================= Nodes page routes ======================== //
 router.get('/buildings/:buildingId/nodes-page', getManagerBuildingNodesPage)
+router.patch('/buildings/:buildingId/alarm-level', updateAlarmLevel)
 
 // ========================= Manager uploading images on AWS routes ===================== //
 router.post('/assets/presigned-url', getManagerPresignedUrl)

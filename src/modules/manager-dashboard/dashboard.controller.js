@@ -273,6 +273,29 @@ managerDashboardController.getManagerBuildingNodesPage = async (req, res) => {
 	}
 }
 
+managerDashboardController.updateAlarmLevel = async (req, res, next) => {
+	try {
+		const { buildingId } = req.params
+		const { alarmType, green, yellow, red } = req.body
+
+		const alarmLevel = await managerDashboardService.updateBuildingAlarmLevel({
+			buildingId,
+			alarmType,
+			green,
+			yellow,
+			red,
+		})
+
+		return sendSuccess(res, {
+			message: 'Company Building Nodes page called successfully',
+			data: alarmLevel,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
 // ================= Manager uploading images on AWS controller =============== //
 managerDashboardController.getManagerPresignedUrl = async (req, res) => {
 	try {

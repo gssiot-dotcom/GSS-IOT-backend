@@ -138,9 +138,9 @@ class AdminDashboardService {
 								$sum: {
 									$cond: [
 										{
-											$eq: [
+											$ne: [
 												{ $toLower: { $ifNull: ['$status', ''] } },
-												'online',
+												'offline',
 											],
 										},
 										1,
@@ -216,11 +216,11 @@ class AdminDashboardService {
 				member => member.status === MEMBER_STATUS.ACTIVE,
 			)
 
-			const managersCount = activeMembers.filter(
+			const managersCount = currentMembersList.filter(
 				member => member.memberRole === managerRole,
 			).length
 
-			const workersCount = activeMembers.filter(
+			const workersCount = currentMembersList.filter(
 				member => member.memberRole === workerRole,
 			).length
 
@@ -421,7 +421,7 @@ class AdminDashboardService {
 							companyId,
 							memberId: createdUser._id,
 							memberRole,
-							status: MEMBER_STATUS.ACTIVE,
+							status: MEMBER_STATUS.INACTIVE,
 						},
 					],
 					{ session },
@@ -443,8 +443,8 @@ class AdminDashboardService {
 					status: createdCompanyMember.status,
 					isAssigned: createdCompanyMember._id ? true : false,
 
-					checked: true,
-					assigned: true,
+					checked: false,
+					// assigned: true,
 				}
 			})
 
@@ -1071,15 +1071,15 @@ class AdminDashboardService {
 		}
 	}
 
-	async getAssignedNodesByGateway(gatewayId) {
+	async getAssignedNodesByGateway({ gatewayId }) {
 		if (!mongoose.Types.ObjectId.isValid(gatewayId)) {
-			throw createError(400, 'Invalid gatewayId')
+			throw this.createError('Invalid gatewayId', 400)
 		}
 
 		const gateway = await this.gatewaySchema.findById(gatewayId).lean()
 
 		if (!gateway) {
-			throw createError(404, 'Gateway not found')
+			throw this.createError('Gateway not found', 404)
 		}
 
 		const nodes = await this.nodeSchema
@@ -1344,121 +1344,121 @@ class AdminDashboardService {
 		}
 	}
 
-	async registerCompanyNodesToGateway({
-		companyId,
-		gatewayId,
-		gatewaySerialNumber,
-		nodeType,
-		numbers,
-	}) {
-		const companyObjectId = this.toObjectId(companyId, 'companyId')
+	// async registerCompanyNodesToGateway({
+	// 	companyId,
+	// 	gatewayId,
+	// 	gatewaySerialNumber,
+	// 	nodeType,
+	// 	numbers,
+	// }) {
+	// 	const companyObjectId = this.toObjectId(companyId, 'companyId')
 
-		if (!nodeType) {
-			throw this.createError('nodeType is required', 400)
-		}
+	// 	if (!nodeType) {
+	// 		throw this.createError('nodeType is required', 400)
+	// 	}
 
-		const uniqueNumbers = this.normalizeNumbers(numbers)
-		const session = await mongoose.startSession()
+	// 	const uniqueNumbers = this.normalizeNumbers(numbers)
+	// 	const session = await mongoose.startSession()
 
-		try {
-			let result
+	// 	try {
+	// 		let result
 
-			await session.withTransaction(async () => {
-				const gatewayQuery = gatewayId
-					? {
-							_id: this.toObjectId(gatewayId, 'gatewayId'),
-							companyId: companyObjectId,
-						}
-					: {
-							serialNumber: String(gatewaySerialNumber || '').trim(),
-							companyId: companyObjectId,
-						}
+	// 		await session.withTransaction(async () => {
+	// 			const gatewayQuery = gatewayId
+	// 				? {
+	// 						_id: this.toObjectId(gatewayId, 'gatewayId'),
+	// 						companyId: companyObjectId,
+	// 					}
+	// 				: {
+	// 						serialNumber: String(gatewaySerialNumber || '').trim(),
+	// 						companyId: companyObjectId,
+	// 					}
 
-				if (!gatewayQuery._id && !gatewayQuery.serialNumber) {
-					throw this.createError(
-						400,
-						'gatewayId or gatewaySerialNumber is required',
-					)
-				}
+	// 			if (!gatewayQuery._id && !gatewayQuery.serialNumber) {
+	// 				throw this.createError(
+	// 					400,
+	// 					'gatewayId or gatewaySerialNumber is required',
+	// 				)
+	// 			}
 
-				const gateway = await this.gatewaySchema
-					.findOne(gatewayQuery)
-					.session(session)
+	// 			const gateway = await this.gatewaySchema
+	// 				.findOne(gatewayQuery)
+	// 				.session(session)
 
-				if (!gateway) {
-					throw this.createError('Gateway not found for this company', 404)
-				}
+	// 			if (!gateway) {
+	// 				throw this.createError('Gateway not found for this company', 404)
+	// 			}
 
-				const nodes = await this.nodeSchema
-					.find({
-						companyId: companyObjectId,
-						nodeType,
-						number: { $in: uniqueNumbers },
-						gatewayId: null,
-					})
-					.session(session)
+	// 			const nodes = await this.nodeSchema
+	// 				.find({
+	// 					companyId: companyObjectId,
+	// 					nodeType,
+	// 					number: { $in: uniqueNumbers },
+	// 					gatewayId: null,
+	// 				})
+	// 				.session(session)
 
-				const foundNumberSet = new Set(nodes.map(node => node.number))
-				const missingNumbers = uniqueNumbers.filter(
-					num => !foundNumberSet.has(num),
-				)
+	// 			const foundNumberSet = new Set(nodes.map(node => node.number))
+	// 			const missingNumbers = uniqueNumbers.filter(
+	// 				num => !foundNumberSet.has(num),
+	// 			)
 
-				if (missingNumbers.length > 0) {
-					throw this.createError(
-						'Some nodes are not available for this company, already assigned, or nodeType does not match',
-						409,
-					)
-				}
+	// 			if (missingNumbers.length > 0) {
+	// 				throw this.createError(
+	// 					'Some nodes are not available for this company, already assigned, or nodeType does not match',
+	// 					409,
+	// 				)
+	// 			}
 
-				const nodeIds = nodes.map(node => node._id)
+	// 			const nodeIds = nodes.map(node => node._id)
 
-				const updateResult = await this.nodeSchema.updateMany(
-					{
-						_id: { $in: nodeIds },
-						companyId: companyObjectId,
-						gatewayId: null,
-					},
-					{
-						$set: {
-							gatewayId: gateway._id,
-							companyId: companyObjectId,
-						},
-					},
-					{ session },
-				)
+	// 			const updateResult = await this.nodeSchema.updateMany(
+	// 				{
+	// 					_id: { $in: nodeIds },
+	// 					companyId: companyObjectId,
+	// 					gatewayId: null,
+	// 				},
+	// 				{
+	// 					$set: {
+	// 						gatewayId: gateway._id,
+	// 						companyId: companyObjectId,
+	// 					},
+	// 				},
+	// 				{ session },
+	// 			)
 
-				if (updateResult.modifiedCount !== uniqueNumbers.length) {
-					throw this.createError(
-						'Nodes were changed by another request. Please refresh and try again.',
-						409,
-					)
-				}
+	// 			if (updateResult.modifiedCount !== uniqueNumbers.length) {
+	// 				throw this.createError(
+	// 					'Nodes were changed by another request. Please refresh and try again.',
+	// 					409,
+	// 				)
+	// 			}
 
-				const updatedNodes = await this.nodeSchema
-					.find({
-						_id: { $in: nodeIds },
-						companyId: companyObjectId,
-					})
-					.populate('companyId', 'companyName companyCode')
-					.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
-					.session(session)
-					.lean()
+	// 			const updatedNodes = await this.nodeSchema
+	// 				.find({
+	// 					_id: { $in: nodeIds },
+	// 					companyId: companyObjectId,
+	// 				})
+	// 				.populate('companyId', 'companyName companyCode')
+	// 				.populate('gatewayId', 'serialNumber gatewayType gatewayStatus')
+	// 				.session(session)
+	// 				.lean()
 
-				result = {
-					ok: true,
-					message: `${updatedNodes.length} nodes registered to gateway`,
-					companyId,
-					gatewayId: gateway._id,
-					gatewaySerialNumber: gateway.serialNumber,
-					nodes: updatedNodes.map(this.normalizeNode),
-				}
-			})
+	// 			result = {
+	// 				ok: true,
+	// 				message: `${updatedNodes.length} nodes registered to gateway`,
+	// 				companyId,
+	// 				gatewayId: gateway._id,
+	// 				gatewaySerialNumber: gateway.serialNumber,
+	// 				nodes: updatedNodes.map(this.normalizeNode),
+	// 			}
+	// 		})
 
-			return result
-		} finally {
-			await session.endSession()
-		}
-	}
+	// 		return result
+	// 	} finally {
+	// 		await session.endSession()
+	// 	}
+	// }
 
 	async registerCompanyNodesToGatewayMqtt({
 		companyId,
@@ -1634,6 +1634,67 @@ class AdminDashboardService {
 				companyId: companyObjectId,
 				gatewayId: gatewayObjectId,
 			})
+			.populate('companyId', 'companyName')
+			.populate('gatewayId', 'serialNumber')
+			.sort({ number: 1 })
+			.lean()
+
+		return nodes.map(this.normalizeNode)
+	}
+
+	// ========= Admin All Devices page services ==========
+
+	async getAdminAllGateways({ search = '' } = {}) {
+		const query = {}
+
+		if (search) {
+			const regex = new RegExp(this.escapeRegex(search), 'i')
+
+			query.$or = [
+				{ serialNumber: regex },
+				{ gatewayType: regex },
+				{ gatewayStatus: regex },
+				{ installedLocation: regex },
+			]
+		}
+
+		const gateways = await this.gatewaySchema
+			.find(query)
+			.populate('companyId', 'companyName')
+			.populate(
+				'buildingId',
+				'title number address buildingType buildingStatus',
+			)
+			.sort({ createdAt: -1 })
+			.lean()
+
+		return gateways.map(this.normalizeGateway)
+	}
+
+	async getAdminAllNodes({ search = '', nodeType = '' } = {}) {
+		const query = {}
+
+		if (nodeType && nodeType !== '전체') {
+			query.nodeType = nodeType
+		}
+
+		if (search) {
+			const regex = new RegExp(this.escapeRegex(search), 'i')
+			const numberSearch = Number(search)
+
+			query.$or = [
+				{ nodeType: regex },
+				{ status: regex },
+				{ installedLocation: regex },
+			]
+
+			if (Number.isInteger(numberSearch)) {
+				query.$or.push({ number: numberSearch })
+			}
+		}
+
+		const nodes = await this.nodeSchema
+			.find(query)
 			.populate('companyId', 'companyName')
 			.populate('gatewayId', 'serialNumber')
 			.sort({ number: 1 })

@@ -12,9 +12,7 @@ exports.NODE_TYPE = {
 	ANGLE: 'angle_node',
 	GANGFORM: 'gangform_node',
 }
-
-;((exports.NODE_STATUS = 'normal' | 'caution'),
-	'warning' | 'danger' | 'offline')
+;((exports.NODE_STATUS = 'safe' | 'caution'), 'warning' | 'danger' | 'offline')
 
 exports.ALARM_NODE_TYPES = {
 	ANGLE: 'angle_node',
@@ -23,10 +21,12 @@ exports.ALARM_NODE_TYPES = {
 
 // It is for company users
 exports.NODE_UPDATE_ALLOWED_FIELDS = [
-	'position',
-	'node_status',
-	'save_status',
-	'node_position_img',
+	'companyId',
+	'buildingId',
+	'gatewayId',
+	'installedLocation',
+	'installLocationImg',
+	'saveStatus',
 ]
 
 // =================== Dashboards endpoint types ===================

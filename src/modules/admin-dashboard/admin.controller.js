@@ -233,7 +233,7 @@ adminDashboardController.getAssigningResources = async (req, res) => {
 	}
 }
 
-// ========= Admin Device page controllers ==========
+// ========= Admin Company Devices page controllers ==========
 
 adminDashboardController.getCompanyGateways = async (req, res) => {
 	try {
@@ -716,6 +716,80 @@ adminDashboardController.getAdminCompanyBuildingNodesPage = async (
 
 		return sendSuccess(res, {
 			message: 'Company Building Nodes page called successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+adminDashboardController.updateAlarmLevel = async (req, res, next) => {
+	try {
+		const { buildingId } = req.params
+		const { alarmType, green, yellow, red } = req.body
+
+		const alarmLevel =
+			await adminCompanyBuildingsService.updateBuildingAlarmLevel({
+				buildingId,
+				alarmType,
+				green,
+				yellow,
+				red,
+			})
+
+		return sendSuccess(res, {
+			message: 'Company Building Nodes page called successfully',
+			data: alarmLevel,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+// ========= Admin All Devices page controllers ==========
+adminDashboardController.getAdminAllGateways = async (req, res) => {
+	try {
+		const data = await adminDashboardService.getAdminAllGateways({
+			search: req.query.search,
+		})
+
+		return sendSuccess(res, {
+			message: 'Gateways fetched successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+adminDashboardController.getAdminAllNodes = async (req, res) => {
+	try {
+		const data = await adminDashboardService.getAdminAllNodes({
+			search: req.query.search,
+			nodeType: req.query.nodeType,
+		})
+
+		return sendSuccess(res, {
+			message: 'Nodes fetched successfully',
+			data,
+			statusCode: 200,
+		})
+	} catch (error) {
+		return sendFail(res, error)
+	}
+}
+
+adminDashboardController.getAssignedNodesByGateway = async (req, res) => {
+	try {
+		const data = await adminDashboardService.getAssignedNodesByGateway({
+			gatewayId: req.params.gatewayId,
+		})
+
+		return sendSuccess(res, {
+			message: 'Gateway nodes fetched successfully',
 			data,
 			statusCode: 200,
 		})

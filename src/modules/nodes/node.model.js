@@ -37,7 +37,7 @@ const nodeSchema = new mongoose.Schema(
 		status: {
 			type: String,
 			enum: Object.values(NODE_STATUS),
-			default: 'normal',
+			default: 'safe',
 		},
 
 		installedLocation: {

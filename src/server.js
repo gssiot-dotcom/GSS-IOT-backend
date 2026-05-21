@@ -44,8 +44,8 @@ const startServer = async () => {
 
 		// Heartbeat job
 		heartbeat = startHeartbeatJob({
-			intervalMs: 2 * 60 * 1000,
-			windowMs: 2 * 60 * 1000,
+			intervalMs: 20 * 60 * 1000,
+			windowMs: 20 * 60 * 1000,
 		})
 
 		// Weather cron (DB ulanganidan keyin ishlasin)

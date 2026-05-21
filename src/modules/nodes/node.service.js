@@ -155,9 +155,9 @@ class NodeService {
 	async nodeGraphicData(query) {
 		logger('request: nodeGraphicData')
 
-		const { node_number, node_type, from, to } = query
+		const { nodeNumber, nodeType, from, to } = query
 
-		if (!node_number || !node_type || !from || !to) {
+		if (!nodeNumber || !nodeType || !from || !to) {
 			throw this.createError(
 				'node_number, node_type, from, to are required',
 				400,
@@ -166,11 +166,11 @@ class NodeService {
 
 		let data = []
 
-		switch (node_type) {
+		switch (nodeType) {
 			case this.NODE_TYPE.ANGLE:
 				data = await this.angleNodeHistory
 					.find({
-						doorNum: Number(node_number),
+						nodeNumber: Number(nodeNumber),
 						createdAt: {
 							$gte: new Date(from),
 							$lte: new Date(to),
@@ -182,7 +182,7 @@ class NodeService {
 			case this.NODE_TYPE.GANGFORM:
 				data = await this.verticalNodeHistory
 					.find({
-						node_number: Number(node_number),
+						nodeNumber: Number(nodeNumber),
 						createdAt: {
 							$gte: new Date(from),
 							$lte: new Date(to),
@@ -214,8 +214,8 @@ class NodeService {
 			throw this.createError('No valid fields provided for update', 400)
 		}
 
-		if ('save_status' in updates) {
-			updates.save_status_lastChange = new Date()
+		if ('saveStatus' in updates) {
+			updates.saveStatusLastChange = new Date()
 		}
 
 		const updatedNode = await this.nodeSchema

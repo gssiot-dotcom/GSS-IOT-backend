@@ -297,7 +297,7 @@ class WorkerDashboardService {
 
 			stats.totalNodesCount += 1
 
-			if (node.isOnline === true) {
+			if (node.status !== 'offline') {
 				stats.onlineNodesCount += 1
 			}
 

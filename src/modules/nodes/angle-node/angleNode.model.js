@@ -18,7 +18,6 @@ const AngleNodeHistorySchema = new mongoose.Schema({
 	angleY: {
 		type: Number,
 		required: false,
-		default: 0,
 	},
 	createdAt: {
 		type: Date,

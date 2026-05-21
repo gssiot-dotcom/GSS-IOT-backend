@@ -7,6 +7,7 @@ const {
 	COMPANY_STATUS,
 	MEMBER_STATUS,
 	BUILDING_STATUS,
+	ALARM_NODE_TYPES,
 } = require('../../lib/config')
 const {
 	CompanySchema,
@@ -125,9 +126,9 @@ class ManagerDashboardService {
 								$sum: {
 									$cond: [
 										{
-											$eq: [
+											$ne: [
 												{ $toLower: { $ifNull: ['$status', ''] } },
-												'online',
+												'offline',
 											],
 										},
 										1,
@@ -160,13 +161,10 @@ class ManagerDashboardService {
 			warningNodesCount: 0,
 		}
 
-		const activeMembers = companyMembersList.filter(
-			m => m.status === MEMBER_STATUS.ACTIVE,
-		)
-		const managersCount = activeMembers.filter(
+		const managersCount = companyMembersList.filter(
 			m => m.memberRole === managerRole,
 		).length
-		const workersCount = activeMembers.filter(
+		const workersCount = companyMembersList.filter(
 			m => m.memberRole === workerRole,
 		).length
 
@@ -288,7 +286,7 @@ class ManagerDashboardService {
 							companyId,
 							memberId: createdUser._id,
 							memberRole: finalType,
-							status: MEMBER_STATUS.ACTIVE,
+							status: MEMBER_STATUS.INACTIVE,
 						},
 					],
 					{ session },
@@ -307,8 +305,8 @@ class ManagerDashboardService {
 					memberRole: createdCompanyMember.memberRole,
 					status: createdCompanyMember.status,
 					isAssigned: true,
-					checked: true,
-					assigned: true,
+					checked: false,
+					// assigned: true,
 				}
 			})
 
@@ -539,7 +537,7 @@ class ManagerDashboardService {
 
 			stats.totalNodesCount += 1
 
-			if (node.isOnline === true) {
+			if (node.status !== 'offline') {
 				stats.onlineNodesCount += 1
 			}
 
@@ -670,9 +668,7 @@ class ManagerDashboardService {
 			buildingId,
 		})
 
-		const workerRoles = Array.isArray(COMPANY_MEMBER_TYPES.worker)
-			? COMPANY_MEMBER_TYPES.worker
-			: [COMPANY_MEMBER_TYPES.worker]
+		const workerRole = COMPANY_MEMBER_TYPES.worker
 
 		const assignedBuildingMembers = await this.buildingWorkerSchema
 			.find({ companyId, buildingId, status: MEMBER_STATUS.ACTIVE })
@@ -687,7 +683,7 @@ class ManagerDashboardService {
 		const inactiveCompanyMembers = await this.companyMemberSchema
 			.find({
 				companyId,
-				memberRole: { $in: workerRoles },
+				memberRole: workerRole,
 				status: MEMBER_STATUS.INACTIVE,
 				memberId: { $nin: assignedUserIds },
 			})
@@ -809,20 +805,26 @@ class ManagerDashboardService {
 
 		const existingUser = await this.userSchema.findOne({ email }).lean()
 		if (existingUser) throw this.createError('User already exists', 409)
+		const hashedPassword = await bcryptjs.hash(password, 10)
 
 		const createdUser = await this.userSchema.create({
 			name,
 			email,
 			phone,
 			userType: 'worker',
-			password,
-			passwordConfirm,
+			password: hashedPassword,
 		})
 
 		await this.companyMemberSchema.create({
 			companyId,
 			memberId: createdUser._id,
 			memberRole: COMPANY_MEMBER_TYPES.worker,
+			status: MEMBER_STATUS.ACTIVE,
+		})
+		await this.buildingWorkerSchema.create({
+			companyId,
+			userId: createdUser._id,
+			buildingId,
 			status: MEMBER_STATUS.ACTIVE,
 		})
 
@@ -882,6 +884,88 @@ class ManagerDashboardService {
 				red: 0,
 			},
 		}
+	}
+
+	validateAlarmLevelPayload({ buildingId, alarmType, green, yellow, red }) {
+		if (!mongoose.Types.ObjectId.isValid(buildingId)) {
+			throw this.createError('Invalid building id', 400)
+		}
+
+		if (!alarmType) {
+			throw this.createError('alarmType is required', 400)
+		}
+
+		if (!Object.values(ALARM_NODE_TYPES).includes(alarmType)) {
+			throw this.createError('Invalid alarm type', 400)
+		}
+
+		const values = { green, yellow, red }
+		const ALARM_MAX_DEGREE = 12
+
+		for (const [key, value] of Object.entries(values)) {
+			if (
+				typeof value !== 'number' ||
+				Number.isNaN(value) ||
+				value < 0 ||
+				value > ALARM_MAX_DEGREE
+			) {
+				throw this.createError(
+					`${key} must be a number between 0 and ${ALARM_MAX_DEGREE}`,
+					400,
+				)
+			}
+		}
+
+		// 0 degani disabled/default sifatida qabul qilinyapti.
+		// Shuning uchun 0 bo‘lsa comparison skip qilamiz.
+		if (green !== 0 && yellow !== 0 && green > yellow) {
+			throw this.createError('green cannot be greater than yellow', 400)
+		}
+
+		if (yellow !== 0 && red !== 0 && yellow > red) {
+			throw this.createError('yellow cannot be greater than red', 400)
+		}
+	}
+
+	async updateBuildingAlarmLevel({
+		buildingId,
+		alarmType,
+		green,
+		yellow,
+		red,
+	}) {
+		this.validateAlarmLevelPayload({
+			buildingId,
+			alarmType,
+			green,
+			yellow,
+			red,
+		})
+
+		const alarmLevel = await this.alarmLevelSchema.findOneAndUpdate(
+			{
+				buildingId,
+				alarmType,
+			},
+			{
+				$set: {
+					green,
+					yellow,
+					red,
+				},
+				$setOnInsert: {
+					buildingId,
+					alarmType,
+				},
+			},
+			{
+				new: true,
+				upsert: true,
+				runValidators: true,
+			},
+		)
+
+		return alarmLevel
 	}
 }
 

@@ -87,7 +87,7 @@ async function handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 }) {
 		gwNumber: gateway.serialNumber,
 		nodeNumber: doorNum,
 		angleX: angle_x,
-		angleYy: angle_y ?? 0, // schemadagi typo saqlab qolindi
+		angleY: angle_y ?? 0, // schemadagi typo saqlab qolindi
 	})
 
 	logger('handleVerticalNodeMqttMessage: history saved', {
@@ -99,22 +99,22 @@ async function handleVerticalNodeMqttMessage({ data, gatewayNumberLast4 }) {
 
 /**
  * buildingId va angle qiymatlari asosida status qaytaradi
- * @returns {'normal'|'caution'|'warning'|'danger'}
+ * @returns {'safe'|'caution'|'warning'|'danger'}
  */
 async function resolveAngleStatus({ buildingId, angle_x, angle_y }) {
-	if (!buildingId) return 'normal'
+	if (!buildingId) return 'safe'
 
 	const alarmLevel = await BuildingAlarmLevelSchema.findOne({
 		buildingId,
 		alarmType: ALARM_NODE_TYPES.GANGFORM,
 	}).lean()
 
-	// AlarmLevel yo'q yoki barcha qiymatlar 0 bo'lsa — normal
+	// AlarmLevel yo'q yoki barcha qiymatlar 0 bo'lsa — safe
 	if (
 		!alarmLevel ||
 		(!alarmLevel.green && !alarmLevel.yellow && !alarmLevel.red)
 	) {
-		return 'normal'
+		return 'safe'
 	}
 
 	const { green, yellow, red } = alarmLevel
@@ -123,10 +123,10 @@ async function resolveAngleStatus({ buildingId, angle_x, angle_y }) {
 		if (red && angle >= red) return 'danger'
 		if (yellow && angle >= yellow) return 'warning'
 		if (green && angle >= green) return 'caution'
-		return 'normal'
+		return 'safe'
 	}
 
-	const statusPriority = { normal: 0, caution: 1, warning: 2, danger: 3 }
+	const statusPriority = { safe: 0, caution: 1, warning: 2, danger: 3 }
 
 	const statusX = getStatus(Math.abs(angle_x))
 	const statusY = getStatus(Math.abs(angle_y))

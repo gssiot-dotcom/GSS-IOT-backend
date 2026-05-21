@@ -83,8 +83,20 @@ router.get(
 	'/company/buildings/:buildingId/nodes-page',
 	adminCompanyController.getAdminCompanyBuildingNodesPage,
 )
+router.patch(
+	'/buildings/:buildingId/alarm-level',
+	adminCompanyController.updateAlarmLevel,
+)
 
-// ================= Admin Device page routes ==================
+// ================= Admin All Devices page routes ==================
+router.get('/device/gateways', adminCompanyController.getAdminAllGateways)
+router.get('/device/nodes', adminCompanyController.getAdminAllNodes)
+router.get(
+	'/device/gateways/:gatewayId/nodes',
+	adminCompanyController.getAssignedNodesByGateway,
+)
+
+// ================= Admin Company Devices page routes ==================
 router.get(
 	'/devices/companies/:companyId/gateways',
 	adminCompanyController.getCompanyGateways,

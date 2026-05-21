@@ -7,10 +7,6 @@ verticalNodeRouter.get(
 	'/gateway/:gatewayId',
 	verticalNodeController.getVerticalNodesByGatewayId,
 )
-verticalNodeRouter.get(
-	'/graphic-data',
-	verticalNodeController.verticalNodeGraphicData,
-)
 
 verticalNodeRouter.post('/create', verticalNodeController.createVerticalNodes)
 // ---- Need to be completed
@@ -30,6 +26,9 @@ verticalNodeRouter.patch(
 
 // 라우터와 컨트롤러 함수 연결
 
-verticalNodeRouter.patch('/verticalnode/:node_number', verticalNodeController.updateLocation);
+verticalNodeRouter.patch(
+	'/verticalnode/:node_number',
+	verticalNodeController.updateLocation,
+)
 
 module.exports = verticalNodeRouter

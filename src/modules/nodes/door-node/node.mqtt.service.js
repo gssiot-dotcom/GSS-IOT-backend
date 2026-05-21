@@ -39,7 +39,7 @@ async function handleNodeMqttMessage({ data, gatewayNumberLast4 }) {
 	}
 
 	const doorState = Number(data.doorChk)
-	const saveStatus = doorState === 1 ? 'danger' : 'normal'
+	const saveStatus = doorState === 1 ? 'danger' : 'safe'
 
 	const eventData = {
 		gwNumber: gateway.serialNumber,
